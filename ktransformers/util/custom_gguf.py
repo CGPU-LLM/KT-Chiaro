@@ -337,7 +337,13 @@ class GGUFLoader:
 
         return values
 
+    # 初始化一个类变量来存储累计内存差值
+    total_mem_diff_accumulated = 0
+
     def load_gguf_tensor(self, name: str, device:str = "cpu", target_dtype = None)->torch.Tensor:
+        import time
+        print(f'>>> name: {name}')
+        # time.sleep(1)
         t = self.tensor_info[name]
         if device.lower() == "cpu":
             print(f"loading {name} with CPU")

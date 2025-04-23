@@ -234,6 +234,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/pybind11 ${CMAKE_
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/llama.cpp ${CMAKE_CURRENT_BINARY_DIR}/third_party/llama.cpp)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/debug)
 if (WIN32)
     include_directories("$ENV{CUDA_PATH}/include")
     add_compile_definitions(KTRANSFORMERS_USE_CUDA=1)
@@ -278,7 +279,8 @@ aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/cpu_backend SOURCE_DIR2)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/operators/llamafile SOURCE_DIR3)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/llamafile SOURCE_DIR4)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/operators/kvcache SOURCE_DIR5)
-set(ALL_SOURCES ${SOURCE_DIR1} ${SOURCE_DIR2} ${SOURCE_DIR3} ${SOURCE_DIR4} ${SOURCE_DIR5})
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/debug SOURCE_DIR_DEBUG)
+set(ALL_SOURCES ${SOURCE_DIR1} ${SOURCE_DIR2} ${SOURCE_DIR3} ${SOURCE_DIR4} ${SOURCE_DIR5} ${SOURCE_DIR_DEBUG})
 message(STATUS "ALL_SOURCES: ${ALL_SOURCES}")
 
 pybind11_add_module(${PROJECT_NAME} MODULE ${ALL_SOURCES})

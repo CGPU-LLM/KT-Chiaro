@@ -152,8 +152,7 @@ class KExpertsCPU(KExpertsBase):
         
         if w is None: 
             w = self.load_weights()[self.key]
-        # print('before load weights')
-        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
+        
         # 计算并输出self.属性赋值的时间
         start_time = time.time()
         self.gate = w["gate"]
@@ -162,15 +161,13 @@ class KExpertsCPU(KExpertsBase):
         self.gate_type = w["gate_type"]
         self.up_type = w["up_type"]
         self.down_type = w["down_type"]
-        # end_time = time.time()
-        # print(f"属性赋值时间: {end_time - start_time:.8f}秒")
+        end_time = time.time()
+        print(f"属性赋值时间: {end_time - start_time:.8f}秒")
 
-        # print(f'||| >>> device: {self.gate.device}, {self.up.device}, {self.down.device}')
+        print(f'||| >>> device: {self.gate.device}, {self.up.device}, {self.down.device}')
         
-        # # 计算并输出得到ptr的时间
-        # print('before get ptr')
-        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
-        # start_time = time.time()
+        # 计算并输出得到ptr的时间
+        start_time = time.time()
         gate_ptr = ctypes.addressof(
             ctypes.cast(self.gate.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
         )
@@ -180,10 +177,9 @@ class KExpertsCPU(KExpertsBase):
         down_ptr = ctypes.addressof(
             ctypes.cast(self.down.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
         )
-        # end_time = time.time()
-        # print(f"指针获取时间: {end_time - start_time:.8f}秒")
-        # print('after get ptr')
-        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
+        end_time = time.time()
+        print(f"指针获取时间: {end_time - start_time:.8f}秒")
+
         n_routed_experts = self.n_routed_experts
         # n_routed_experts = len(self.orig_module)
         moe_config = MOEConfig(
@@ -206,7 +202,6 @@ class KExpertsCPU(KExpertsBase):
         num_experts_per_tok = self.config.num_experts_per_tok
         self.moe = MOE(moe_config)
         self.cpu_infer = KExpertsCPU.CPU_INFER
-        # warmup = False
         if warmup:
             self.cpu_infer.submit(self.moe.warm_up())
             self.cpu_infer.sync()
@@ -223,7 +218,6 @@ class KExpertsCPU(KExpertsBase):
         KExpertsCPU.input_tensor_cpu.copy_(input_tensor, non_blocking=True)
         KExpertsCPU.expert_ids_cpu.copy_(expert_ids, non_blocking=True)
         KExpertsCPU.weights_cpu.copy_(weights, non_blocking=True)
-        print(f'expert_ids.size() = {expert_ids.size()}')
         self.cpu_infer.submit_with_cuda_stream(
             torch.cuda.current_stream(self.out_device).cuda_stream, 
             self.moe.forward(
@@ -245,7 +239,7 @@ class KExpertsCPU(KExpertsBase):
     @log_function_call
     def forward(self, input_tensor, expert_ids, weights):
         # generate, capture and run cuda graph
-        print(f'>>> expert_ids: {expert_ids}')
+        # print(expert_ids)
         if input_tensor.size(0)==1 and torch.cuda.is_current_stream_capturing():
             # TODO: this branch is unreachable, but the shape of input_tensor([1,hidden_size]) and input_tensor_cpu([hidden_size]) is not compatible
             # ! unreachable
@@ -253,7 +247,6 @@ class KExpertsCPU(KExpertsBase):
             KExpertsCPU.input_tensor_cpu.copy_(input_tensor, non_blocking=True)
             KExpertsCPU.expert_ids_cpu.copy_(expert_ids, non_blocking=True)
             KExpertsCPU.weights_cpu.copy_(weights, non_blocking=True)
-            print(f'expert_ids.size() = {expert_ids.size()}')
             self.cpu_infer.submit_with_cuda_stream(
                 torch.cuda.current_stream().cuda_stream, 
                 self.moe.forward(
@@ -270,13 +263,12 @@ class KExpertsCPU(KExpertsBase):
             return KExpertsCPU.output_gpu_map[self.out_device]
         else:
             print('FORWARD: by submit')
-            print(f'expert_ids.size() = {expert_ids.size()}')
+            print(f'origin device: {input_tensor.device}, {expert_ids.device}, {weights.device}')
             input_tensor = input_tensor.contiguous().cpu()
             expert_ids = expert_ids.contiguous().cpu()
             weights = weights.contiguous().to(torch.float32).cpu()
             output = torch.empty_like(input_tensor).contiguous()
             print(f'after contiguous: {input_tensor.device}, {expert_ids.device}, {weights.device}, {output.device}')
-            print(f'expert_ids.size() = {expert_ids.size()}')
             self.cpu_infer.submit(
                 self.moe.forward(
                     expert_ids.size(0), 

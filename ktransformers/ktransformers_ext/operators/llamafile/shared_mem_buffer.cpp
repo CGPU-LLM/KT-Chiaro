@@ -9,6 +9,7 @@
  **/
 #include "shared_mem_buffer.h"
 #include <cstdio>
+#include "debug.h"
 
 SharedMemBuffer::SharedMemBuffer() {
     buffer_ = nullptr;
@@ -27,6 +28,7 @@ void SharedMemBuffer::alloc(void* object, std::vector<std::pair<void**, uint64_t
         size += request.second;
     }
     if (size > size_) {
+        debug_printf("UPDATE BUFFER SIZE: %llu -> %llu\n", size_, size);
         if (buffer_) {
             free(buffer_);
         }
