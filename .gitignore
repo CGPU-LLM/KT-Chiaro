@@ -29,4 +29,5 @@ test_prompt.txt
 down_gguf/
 dpskv2list/
 perf.*
+pfaults.txt
 
