@@ -36,6 +36,8 @@ from ktransformers.operators.linear import KLinearMarlin, KLinearTorch, KTransfo
 import time
 from ktransformers.operators.cpuinfer import CPUInfer
 
+from ktransformers.operators.debugger import log_function_call
+import time
 
 # class Base(BaseInjectedModule, ABC):
 class KExpertsBase(ABC):
@@ -142,16 +144,33 @@ class KExpertsCPU(KExpertsBase):
         self.n_routed_experts = n_routed_experts
         self.out_device = out_device
 
+    @log_function_call
     def load(self, w: dict | nn.Parameter | tuple | None = None, device:str|None = None, warmup:bool = False):
+
         if device:
             assert device.lower() == "cpu", "KExpertsCPU can only be loaded on CPU, Parameter \"device\" can be cpu or None."
-        if w is None: w = self.load_weights()[self.key]
+        
+        if w is None: 
+            w = self.load_weights()[self.key]
+        # print('before load weights')
+        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
+        # 计算并输出self.属性赋值的时间
+        start_time = time.time()
         self.gate = w["gate"]
         self.up = w["up"]
         self.down = w["down"]
         self.gate_type = w["gate_type"]
         self.up_type = w["up_type"]
         self.down_type = w["down_type"]
+        # end_time = time.time()
+        # print(f"属性赋值时间: {end_time - start_time:.8f}秒")
+
+        # print(f'||| >>> device: {self.gate.device}, {self.up.device}, {self.down.device}')
+        
+        # # 计算并输出得到ptr的时间
+        # print('before get ptr')
+        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
+        # start_time = time.time()
         gate_ptr = ctypes.addressof(
             ctypes.cast(self.gate.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
         )
@@ -161,7 +180,10 @@ class KExpertsCPU(KExpertsBase):
         down_ptr = ctypes.addressof(
             ctypes.cast(self.down.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
         )
-        #print(self.gate_type, self.up_type, self.down_type)
+        # end_time = time.time()
+        # print(f"指针获取时间: {end_time - start_time:.8f}秒")
+        # print('after get ptr')
+        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
         n_routed_experts = self.n_routed_experts
         # n_routed_experts = len(self.orig_module)
         moe_config = MOEConfig(
@@ -184,6 +206,7 @@ class KExpertsCPU(KExpertsBase):
         num_experts_per_tok = self.config.num_experts_per_tok
         self.moe = MOE(moe_config)
         self.cpu_infer = KExpertsCPU.CPU_INFER
+        # warmup = False
         if warmup:
             self.cpu_infer.submit(self.moe.warm_up())
             self.cpu_infer.sync()
@@ -194,43 +217,83 @@ class KExpertsCPU(KExpertsBase):
             KExpertsCPU.expert_ids_cpu = torch.zeros((num_experts_per_tok), device="cpu", dtype=torch.long, pin_memory=True)
             KExpertsCPU.weights_cpu = torch.zeros((num_experts_per_tok), device="cpu", dtype=torch.float32, pin_memory=True)
             KExpertsCPU.output_cpu = torch.zeros((self.config.hidden_size), device="cpu", pin_memory=True, dtype=torch.bfloat16)
-            
+
+    @log_function_call
     def submit_for_one_decode(self, input_tensor, expert_ids, weights):
         KExpertsCPU.input_tensor_cpu.copy_(input_tensor, non_blocking=True)
         KExpertsCPU.expert_ids_cpu.copy_(expert_ids, non_blocking=True)
         KExpertsCPU.weights_cpu.copy_(weights, non_blocking=True)
-        self.cpu_infer.submit_with_cuda_stream(torch.cuda.current_stream(self.out_device).cuda_stream, self.moe.forward(1, expert_ids.size(0), KExpertsCPU.expert_ids_cpu.data_ptr(), KExpertsCPU.weights_cpu.data_ptr(), KExpertsCPU.input_tensor_cpu.data_ptr(), KExpertsCPU.output_cpu.data_ptr()))
-        
+        print(f'expert_ids.size() = {expert_ids.size()}')
+        self.cpu_infer.submit_with_cuda_stream(
+            torch.cuda.current_stream(self.out_device).cuda_stream, 
+            self.moe.forward(
+                1, 
+                expert_ids.size(0), 
+                KExpertsCPU.expert_ids_cpu.data_ptr(), 
+                KExpertsCPU.weights_cpu.data_ptr(), 
+                KExpertsCPU.input_tensor_cpu.data_ptr(), 
+                KExpertsCPU.output_cpu.data_ptr()
+            )
+        )
+
+    @log_function_call
     def sync_for_one_decode(self):
         self.cpu_infer.sync_with_cuda_stream(torch.cuda.current_stream(self.out_device).cuda_stream)
         KExpertsCPU.output_gpu_map[self.out_device].copy_(KExpertsCPU.output_cpu, non_blocking=True)
         return KExpertsCPU.output_gpu_map[self.out_device]
 
+    @log_function_call
     def forward(self, input_tensor, expert_ids, weights):
         # generate, capture and run cuda graph
-        # print(expert_ids)
+        print(f'>>> expert_ids: {expert_ids}')
         if input_tensor.size(0)==1 and torch.cuda.is_current_stream_capturing():
             # TODO: this branch is unreachable, but the shape of input_tensor([1,hidden_size]) and input_tensor_cpu([hidden_size]) is not compatible
+            # ! unreachable
             #print("capturing experts")
             KExpertsCPU.input_tensor_cpu.copy_(input_tensor, non_blocking=True)
             KExpertsCPU.expert_ids_cpu.copy_(expert_ids, non_blocking=True)
             KExpertsCPU.weights_cpu.copy_(weights, non_blocking=True)
-            self.cpu_infer.submit_with_cuda_stream(torch.cuda.current_stream().cuda_stream, self.moe.forward(1, expert_ids.size(1), KExpertsCPU.expert_ids_cpu.data_ptr(), KExpertsCPU.weights_cpu.data_ptr(), KExpertsCPU.input_tensor_cpu.data_ptr(), KExpertsCPU.output_cpu.data_ptr()))
+            print(f'expert_ids.size() = {expert_ids.size()}')
+            self.cpu_infer.submit_with_cuda_stream(
+                torch.cuda.current_stream().cuda_stream, 
+                self.moe.forward(
+                    1, 
+                    expert_ids.size(1), 
+                    KExpertsCPU.expert_ids_cpu.data_ptr(), 
+                    KExpertsCPU.weights_cpu.data_ptr(), 
+                    KExpertsCPU.input_tensor_cpu.data_ptr(), 
+                    KExpertsCPU.output_cpu.data_ptr()
+                )
+            )
             self.cpu_infer.sync_with_cuda_stream(torch.cuda.current_stream().cuda_stream)
             KExpertsCPU.output_gpu_map[self.out_device].copy_(KExpertsCPU.output_cpu, non_blocking=True)
             return KExpertsCPU.output_gpu_map[self.out_device]
         else:
+            print('FORWARD: by submit')
+            print(f'expert_ids.size() = {expert_ids.size()}')
             input_tensor = input_tensor.contiguous().cpu()
             expert_ids = expert_ids.contiguous().cpu()
             weights = weights.contiguous().to(torch.float32).cpu()
             output = torch.empty_like(input_tensor).contiguous()
-            self.cpu_infer.submit(self.moe.forward(expert_ids.size(0), expert_ids.size(1), expert_ids.data_ptr(), weights.data_ptr(), input_tensor.data_ptr(), output.data_ptr()))
+            print(f'after contiguous: {input_tensor.device}, {expert_ids.device}, {weights.device}, {output.device}')
+            print(f'expert_ids.size() = {expert_ids.size()}')
+            self.cpu_infer.submit(
+                self.moe.forward(
+                    expert_ids.size(0), 
+                    expert_ids.size(1), 
+                    expert_ids.data_ptr(), 
+                    weights.data_ptr(), 
+                    input_tensor.data_ptr(), 
+                    output.data_ptr()
+                )
+            )
             self.cpu_infer.sync()
             return output.to(device=object.__getattribute__(self, "out_device"))
     
     def unload(self):
         return
 
+    @log_function_call
     def load_weights(self, override_key: str | None = None, device: str = "cpu"):
         # TODO: support Bias
         res = {}
@@ -248,6 +311,7 @@ class KExpertsCPU(KExpertsBase):
 
         for key in keys:
             if self.gguf_loader.safetensor_loader is not None:
+                print('LOAD: by load_tensor')
                 # using a temp ugly way to temprary load the tensor
                 gate = self.gguf_loader.safetensor_loader.load_tensor(key + ".ffn_gate_exps.weight").numpy()
                 up = self.gguf_loader.safetensor_loader.load_tensor(key + ".ffn_up_exps.weight").numpy()
@@ -257,6 +321,7 @@ class KExpertsCPU(KExpertsBase):
                 down_type = self.gguf_loader.safetensor_loader.load_tensor(key + ".ffn_down_exps.ggml_type").item()
             
             elif key + ".ffn_gate_exps.weight" in self.gguf_loader.tensor_info:
+                print('LOAD: by get_mmap_tensor')
                 gate = self.gguf_loader.get_mmap_tensor(key + ".ffn_gate_exps.weight")
                 up = self.gguf_loader.get_mmap_tensor(key + ".ffn_up_exps.weight")
                 down = self.gguf_loader.get_mmap_tensor(key + ".ffn_down_exps.weight")
@@ -547,6 +612,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
                  generate_device: str = "cpu",
                  generate_op: str | None = "KExpertsCPU",
                  **kwargs):
+        # print("\n>>>> KTransformersExperts __init__")
         BaseInjectedModule.__init__(self, key, gguf_loader, config, orig_module, prefill_device, generate_device, **kwargs)
         KExpertsBase.__init__(self, key, gguf_loader, config, orig_module, generate_device, **kwargs)
         if generate_op is not None:
@@ -561,8 +627,10 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         self.cpu_mlp_type = generate_op
         self.mode = InferenceState.UNLOAD
 
+    @log_function_call
     def load(self, w: dict = None,  mode: InferenceState = None, warmup: bool = True):
         # TODO support w as input
+        # print(f"\n>>>> KTransformersExperts load {self.generate_experts.device}, {self.prefill_experts.device}")
         if not mode: mode = InferenceState.GENERATE
         if mode == InferenceState.GENERATE:
             self.prefill_experts.unload()
@@ -581,6 +649,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         else:
             raise ValueError("mode must be either InferenceState.GENERATE, InferenceState.PREFILL or InferenceState.UNLOAD")
 
+    @log_function_call
     def unload(self):
         if self.generate_experts is not None:
             self.generate_experts.unload()
@@ -588,7 +657,9 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
             self.prefill_experts.unload()
         self.device = self.generate_experts.device
 
+    @log_function_call
     def forward(self, input_tensor, expert_ids, weights):
+        # print("\n>>>> KTransformersExperts forward")
         if self.mode == InferenceState.GENERATE:
             assert self.generate_experts is not None, "generate_experts is None"
             return self.generate_experts.forward(input_tensor, expert_ids, weights)
@@ -598,6 +669,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         else:
             raise ValueError("load or set_inference_mode before forward")
 
+    @log_function_call
     def set_inference_mode(self, mode: InferenceState):
         if mode == InferenceState.GENERATE:
             self.load(mode=InferenceState.GENERATE, warmup=False)

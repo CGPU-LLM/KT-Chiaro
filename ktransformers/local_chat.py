@@ -33,6 +33,8 @@ from ktransformers.server.config.config import Config
 from ktransformers.operators.flashinfer_wrapper import flashinfer_enabled
 from ktransformers.util.vendors import device_manager, get_device, to_device, GPUVendor
 
+# torch.cuda.memory._record_memory_history()
+
 custom_models = {
     "DeepseekV2ForCausalLM": DeepseekV2ForCausalLM,
     "DeepseekV3ForCausalLM": DeepseekV3ForCausalLM,
@@ -158,6 +160,13 @@ def local_chat(
             content = open(content, "r").read()
             
         messages = [{"role": "user", "content": content}]
+
+        print('content:', content)
+
+        if content == "EXIT":
+            # torch.cuda.memory._dump_snapshot("my_snapshot.pickle")
+            exit()
+        
         input_tensor = tokenizer.apply_chat_template(
             messages, add_generation_prompt=True, return_tensors="pt"
         )
@@ -166,7 +175,7 @@ def local_chat(
             input_tensor = torch.cat(
                 [input_tensor, token_thinks], dim=1
             )
-        if mode == 'long_context':
+        if mode == 'long_context': 
             assert Config().long_context_config['max_seq_len'] > input_tensor.shape[1] + max_new_tokens, \
             "please change max_seq_len in  ~/.ktransformers/config.yaml"
         

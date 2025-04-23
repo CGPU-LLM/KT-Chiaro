@@ -17,20 +17,32 @@ from ktransformers.util.utils import set_module, load_weights
 import itertools
 import copy
 
+import time
+
 def inject(module, local_optimization_dict, model_config:AutoConfig ,gguf_loader:GGUFLoader, prefix=''):
+    # print(f'module: {module}')
     for name, child in module._modules.items():
+        # print(f"inject {name}, {child}")
         if child is not None:
             child_prefix = prefix + name
+            # print(f"child_prefix: {child_prefix}")
             if child_prefix in local_optimization_dict:
                 inject_module_meta=local_optimization_dict[child_prefix]
+                # print(f"inject_module_meta: {inject_module_meta}")
                 if inject_module_meta["class"] != "default":
                     import_path = inject_module_meta["class"].split(".")
+                    # print(f"import_path: {import_path}")
                     import_module_name = ".".join(import_path[:-1])
+                    # print(f"import_module_name: {import_module_name}")
                     gguf_loader.tensor_device_map[inject_module_meta["key"]] = inject_module_meta["kwargs"] if "kwargs" in inject_module_meta else dict()
+                    # print(f"gguf_loader.tensor_device_map: {gguf_loader.tensor_device_map}")
                     import_class_name = import_path[-1]
+                    # print(f"import_class_name: {import_class_name}")
                     module_cls=getattr(__import__(import_module_name, fromlist=[""]), import_class_name)
+                    # print(f"module_cls: {module_cls}")
                     print(f"Injecting {child_prefix} as", import_module_name, ".", import_class_name)
                     inject_module=module_cls(key = inject_module_meta["key"], gguf_loader = gguf_loader, config = model_config, orig_module=child, **inject_module_meta["kwargs"])
+                    # print(f"inject_module: {inject_module}")
                     set_module(module, name, inject_module)
                 elif inject_module_meta["class"] == "default":
                     print(f"Injecting {child_prefix} as default")
@@ -76,6 +88,7 @@ def gen_optimize_config(module: nn.Module, out_data: Mapping, rule_list: List, p
         if "replace" in rule:
             replace_meta = rule["replace"]
             if module_name not in out_data:
+                # print(f"prefix: {prefix}, gguf: {translate_name_to_gguf(prefix)}, translated_name: {translated_name}")
                 out_data[module_name]={"key": translated_name,
                                     "class": replace_meta["class"] if "class" in replace_meta else "default",
                                     # "device": replace_meta["device"] if "device" in replace_meta else default_device,
@@ -96,9 +109,16 @@ def gen_optimize_config(module: nn.Module, out_data: Mapping, rule_list: List, p
                        "prefill_device": default_device}
         }
 
-    #print(out_data[module_name])
+    
     #input()
-
+    # print('==============================')
+    # print(out_data)
+    # print("------------------------------")
+    # print(module_name)
+    # print("------------------------------")
+    # print(out_data[module_name])
+    # print('==============================')
+    # time.sleep(1)
     if recursive:
         for name, child in module._modules.items():
             if child is not None:

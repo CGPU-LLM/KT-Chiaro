@@ -126,7 +126,7 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
     
     def decode_one_tokens(cuda_graph_runner, cur_token, position_ids, cache_position, past_key_values, logits_warper, generation_config, use_cuda_graph: bool = True):
         if cuda_graph_runner is None:
-            use_cuda_graph = False
+            use_cuda_graph = False 
         if use_cuda_graph:
             logits = cuda_graph_runner(cur_token, position_ids, cache_position)
         else:
@@ -143,7 +143,6 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
             past_key_values.change_seq_length(1)
         for device in all_cuda_device:
             torch.cuda.synchronize(device)
-        #print(logits)
         next_token_scores = logits_warper(inputs, logits[:, -1, :])
         if generation_config.do_sample:
             probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -235,11 +234,15 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
         cuda_graph_runner = None
             
         start_time = time.time()
+
+        realcontent = ''
+
         for i in range(1, max_new_tokens):
             if use_flashinfer_mla:
                 MLAWrapperSingleton.plan_all(None,None,None,position_ids.squeeze(1)+1,
                                              num_heads, head_dim_ckv, head_dim_kpe, past_key_values.page_size,
                                              model.model.layers[0].self_attn.softmax_scale, torch.bfloat16, torch.bfloat16)
+            
             global warm_uped
             if use_cuda_graph and ( (warm_uped == True and int(i) == 1) or (warm_uped == False and int(i) == 2) ):
                 warm_uped = True
@@ -250,7 +253,6 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
             generated_ids[:, cache_position] = next_token.int()
             tokens.append(int(next_token))
             seq_length += 1
-            
             if next_token[0].item() == tokenizer.eos_token_id or tokenizer.decode(next_token.tolist()) == '<|im_end|>':
                 print(stream.end(), end="", flush=True)
                 break
@@ -259,7 +261,7 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
             cache_position += 1
             position_ids = cache_position.unsqueeze(0)
         
-
+    print('generate end')
     total_time = time.time() - start_time
     tokens_generated = len(tokens)
     tokens_per_second = tokens_generated / total_time

@@ -67,16 +67,19 @@ class CUDAGraphRunner:
         cache_position,
     ) -> torch.Tensor:
         # Copy the input tensors to the input buffers.
+        # print('\n>>> begin copy')
         inputs_embeds = self.model.model.embed_tokens(cur_token.to("cpu"))
         self.input_buffers["inputs_embeds"].copy_(inputs_embeds)
         self.input_buffers["position_ids"].copy_(position_ids)
         self.input_buffers["cache_position"].copy_(cache_position)
-
+        # print('\n>>> end copy')
         # Run the graph.
         #print("begin replay")
         #time.sleep(1)
         self.graph.replay()
+        # print('\n>>> begin synchronize')
         torch.cuda.synchronize(self.main_device)
+        # print('\n>>> end synchronize')
         # Return the output tensor.
         return self.output_buffers["logits"]
 
