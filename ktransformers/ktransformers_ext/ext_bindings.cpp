@@ -610,6 +610,20 @@ PYBIND11_MODULE(cpuinfer_ext, m) {
                              (void *)down_proj, (ggml_type)gate_type,
                              (ggml_type)up_type, (ggml_type)down_type,
                              (ggml_type)hidden_type);
+        }))
+        .def(py::init([](int expert_num, int routed_expert_num, int hidden_size,
+                         int intermediate_size, int stride, int group_min_len,
+                         int group_max_len, const std::string &gate_file,
+                         uint64_t gate_offset, const std::string &up_file,
+                         uint64_t up_offset, const std::string &down_file,
+                         uint64_t down_offset, int gate_type, int up_type,
+                         int down_type, int hidden_type) {
+            return MOEConfig(expert_num, routed_expert_num, hidden_size,
+                             intermediate_size, stride, group_min_len,
+                             group_max_len, gate_file, gate_offset,
+                             up_file, up_offset, down_file, down_offset,
+                             (ggml_type)gate_type, (ggml_type)up_type,
+                             (ggml_type)down_type, (ggml_type)hidden_type);
         }));
     py::class_<MOE>(moe_module, "MOE")
         .def(py::init<MOEConfig>())

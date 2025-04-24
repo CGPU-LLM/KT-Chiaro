@@ -168,7 +168,7 @@ static const struct GemmFuncs {
  * Despite its name, this isn't a generalized implementation. Work is
  * only performed when a handwritten kernel is written and available.
  * Otherwise the caller should fall back to a general matmul routine.
- *
+ * A(m * k) * B(k * n) = C(m * n)
  * @param m is rows in `A` and `C`
  * @param n is cols in `B` and `C`
  * @param k is cols in `A` and rows in `B`

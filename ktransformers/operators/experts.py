@@ -167,25 +167,20 @@ class KExpertsCPU(KExpertsBase):
 
         # print(f'||| >>> device: {self.gate.device}, {self.up.device}, {self.down.device}')
         
-        # # 计算并输出得到ptr的时间
-        # print('before get ptr')
-        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
-        # start_time = time.time()
-        gate_ptr = ctypes.addressof(
-            ctypes.cast(self.gate.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
-        )
-        up_ptr = ctypes.addressof(
-            ctypes.cast(self.up.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
-        )
-        down_ptr = ctypes.addressof(
-            ctypes.cast(self.down.ctypes.data, ctypes.POINTER(ctypes.c_uint64)).contents
-        )
-        # end_time = time.time()
-        # print(f"指针获取时间: {end_time - start_time:.8f}秒")
-        # print('after get ptr')
-        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
+        # 使用外部文件路径和偏移量初始化 MOEConfig
         n_routed_experts = self.n_routed_experts
-        # n_routed_experts = len(self.orig_module)
+        # 构造 tensor 名称
+        gate_name = f"{self.key}.ffn_gate_exps.weight"
+        up_name = f"{self.key}.ffn_up_exps.weight"
+        down_name = f"{self.key}.ffn_down_exps.weight"
+        # 获取文件路径和偏移量
+        gate_file = self.gguf_loader.get_tensor_file(gate_name)
+        gate_offset = self.gguf_loader.get_tensor_offset(gate_name)
+        up_file = self.gguf_loader.get_tensor_file(up_name)
+        up_offset = self.gguf_loader.get_tensor_offset(up_name)
+        down_file = self.gguf_loader.get_tensor_file(down_name)
+        down_offset = self.gguf_loader.get_tensor_offset(down_name)
+        # hidden_type 暂用固定值，后续可从模型配置获取
         moe_config = MOEConfig(
             n_routed_experts,
             self.config.num_experts_per_tok,
@@ -194,13 +189,13 @@ class KExpertsCPU(KExpertsBase):
             64,
             10,
             1024,
-            gate_ptr,
-            up_ptr,
-            down_ptr,
+            gate_file, gate_offset,
+            up_file, up_offset,
+            down_file, down_offset,
             self.gate_type,
             self.up_type,
             self.down_type,
-            30, # TODO: get from model.dtype
+            30,
         )
         # print(n_routed_experts, hidden_size, moe_intermediate_size)
         num_experts_per_tok = self.config.num_experts_per_tok

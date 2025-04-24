@@ -22,9 +22,38 @@
 
 MOE::MOE(MOEConfig config) {
     config_ = config;
-    gate_proj_ = config_.gate_proj;
-    up_proj_ = config_.up_proj;
-    down_proj_ = config_.down_proj;
+    // 如果使用外部文件存储的专家权重，则从文件加载
+    if (config_.use_external_proj) {
+        // Gate 权重
+        size_t gate_size = (size_t)config_.expert_num * config_.intermediate_size * config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
+        FILE* gf = fopen(config_.gate_proj_file.c_str(), "rb");
+        fseek(gf, config_.gate_proj_offset, SEEK_SET);
+        void* gbuf = malloc(gate_size);
+        fread(gbuf, 1, gate_size, gf);
+        fclose(gf);
+        gate_proj_ = gbuf;
+        // Up 权重
+        size_t up_size = gate_size; // same shape as gate
+        FILE* uf = fopen(config_.up_proj_file.c_str(), "rb");
+        fseek(uf, config_.up_proj_offset, SEEK_SET);
+        void* ubuf = malloc(up_size);
+        fread(ubuf, 1, up_size, uf);
+        fclose(uf);
+        up_proj_ = ubuf;
+        // Down 权重
+        size_t down_size = (size_t)config_.expert_num * config_.hidden_size * config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
+        FILE* df = fopen(config_.down_proj_file.c_str(), "rb");
+        fseek(df, config_.down_proj_offset, SEEK_SET);
+        void* dbuf = malloc(down_size);
+        fread(dbuf, 1, down_size, df);
+        fclose(df);
+        down_proj_ = dbuf;
+        printf("[C++] LOAD MOE from [%s, %llu], [%s, %llu], [%s, %llu]\n", config_.gate_proj_file.c_str(), config_.gate_proj_offset, config_.up_proj_file.c_str(), config_.up_proj_offset, config_.down_proj_file.c_str(), config_.down_proj_offset);
+    } else {
+        gate_proj_ = config_.gate_proj;
+        up_proj_ = config_.up_proj;
+        down_proj_ = config_.down_proj;
+    }
     
     #ifdef USE_NUMA
     int numa_nodes = numa_num_configured_nodes();
@@ -85,7 +114,6 @@ MOE::MOE(MOEConfig config) {
     m_mem_requests.push_back({(void**)&m_local_up_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
     m_mem_requests.push_back({(void**)&m_local_intermediate_fp32_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
     m_mem_requests.push_back({(void**)&m_local_down_input_, config_.routed_expert_num * config_.group_max_len * config_.intermediate_size * ggml_type_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type)});
-    m_mem_requests.push_back({(void**)&m_local_down_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.hidden_size});
     m_output_fp32_.resize(config_.group_max_len);
     for (int i = 0; i < config_.group_max_len; i++) {
         m_mem_requests.push_back({(void**)&m_output_fp32_[i], sizeof(float) * config_.hidden_size});

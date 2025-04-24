@@ -26,6 +26,7 @@ from enum import IntEnum
 import torch
 import KTransformersOps
 from .custom_loader import SafeTensorLoader
+from .debug_utils import debug_log
 import ctypes
 import math
 
@@ -292,13 +293,19 @@ class GGUFLoader:
     
     def get_mmap_tensor(self, name):
         t = self.tensor_info[name]
-        mmap_data = self.file_data_map[ self.tensor_file_map[name] ]
+        file_path = self.tensor_file_map[name]
+        mmap_data = self.file_data_map[file_path]
 
         offset = t["offset"]
         item_type = t["item_type"]
         item_count = t["item_count"]
         itemsize = int(np.empty([], dtype = item_type).itemsize)
-        return mmap_data[offset : offset + itemsize * item_count]
+        bytes_to_read = itemsize * item_count
+
+        debug_log("get_mmap_tensor: Reading tensor '%s' from file '%s', offset %d, bytes %d",
+                  name, file_path, offset, bytes_to_read)
+
+        return mmap_data[offset : offset + bytes_to_read]
     
     def get_undequanted_tensor_and_ggml_type(self, name):
         t = self.tensor_info[name]
@@ -306,6 +313,18 @@ class GGUFLoader:
         ggml_type = t["ggml_type"]
         data = torch.from_numpy(data)
         return data, ggml_type
+
+    def get_tensor_file(self, name: str) -> str:
+        """
+        Return the file path where the tensor 'name' is stored.
+        """
+        return self.tensor_file_map[name]
+
+    def get_tensor_offset(self, name: str) -> int:
+        """
+        Return the byte offset in the file where the tensor 'name' data begins.
+        """
+        return self.tensor_info[name]["offset"]
 
     def load_expert_tensor(self, name, data, expert_id, elements_per_expert, device = "cuda", target_dtype = torch.get_default_dtype())->torch.Tensor:
         t = self.tensor_info[name]
