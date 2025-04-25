@@ -22,33 +22,14 @@
 
 MOE::MOE(MOEConfig config) {
     config_ = config;
+    // 初始化专家内存管理器
+    mem_manager_ = std::make_unique<cpu_backend::ExpertMemoryManager>(config_);
+
     // 如果使用外部文件存储的专家权重，则从文件加载
     if (config_.use_external_proj) {
-        // Gate 权重
-        size_t gate_size = (size_t)config_.expert_num * config_.intermediate_size * config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
-        FILE* gf = fopen(config_.gate_proj_file.c_str(), "rb");
-        fseek(gf, config_.gate_proj_offset, SEEK_SET);
-        void* gbuf = malloc(gate_size);
-        fread(gbuf, 1, gate_size, gf);
-        fclose(gf);
-        gate_proj_ = gbuf;
-        // Up 权重
-        size_t up_size = gate_size; // same shape as gate
-        FILE* uf = fopen(config_.up_proj_file.c_str(), "rb");
-        fseek(uf, config_.up_proj_offset, SEEK_SET);
-        void* ubuf = malloc(up_size);
-        fread(ubuf, 1, up_size, uf);
-        fclose(uf);
-        up_proj_ = ubuf;
-        // Down 权重
-        size_t down_size = (size_t)config_.expert_num * config_.hidden_size * config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
-        FILE* df = fopen(config_.down_proj_file.c_str(), "rb");
-        fseek(df, config_.down_proj_offset, SEEK_SET);
-        void* dbuf = malloc(down_size);
-        fread(dbuf, 1, down_size, df);
-        fclose(df);
-        down_proj_ = dbuf;
-        printf("[C++] LOAD MOE from [%s, %llu], [%s, %llu], [%s, %llu]\n", config_.gate_proj_file.c_str(), config_.gate_proj_offset, config_.up_proj_file.c_str(), config_.up_proj_offset, config_.down_proj_file.c_str(), config_.down_proj_offset);
+        gate_proj_ = nullptr;
+        up_proj_ = nullptr;
+        down_proj_ = nullptr;
     } else {
         gate_proj_ = config_.gate_proj;
         up_proj_ = config_.up_proj;
@@ -114,6 +95,7 @@ MOE::MOE(MOEConfig config) {
     m_mem_requests.push_back({(void**)&m_local_up_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
     m_mem_requests.push_back({(void**)&m_local_intermediate_fp32_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
     m_mem_requests.push_back({(void**)&m_local_down_input_, config_.routed_expert_num * config_.group_max_len * config_.intermediate_size * ggml_type_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type)});
+    m_mem_requests.push_back({(void**)&m_local_down_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.hidden_size});
     m_output_fp32_.resize(config_.group_max_len);
     for (int i = 0; i < config_.group_max_len; i++) {
         m_mem_requests.push_back({(void**)&m_output_fp32_[i], sizeof(float) * config_.hidden_size});
@@ -192,21 +174,30 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
             }
         }
     }
+    // 如果使用外部文件存储的专家权重，预加载所需专家
+    if (config_.use_external_proj) {
+        for (int idx = 0; idx < k; ++idx) {
+            mem_manager_->load(expert_ids[idx]);
+        }
+    }
     int nth = config_.intermediate_size / config_.stride;
     backend->do_work_stealing_job(nth * k, nullptr, [&](int task_id) {
         int expert_idx = task_id / nth;
         uint64_t expert_id = expert_ids[expert_idx];
         int ith = task_id % nth;
-        
-        #ifdef USE_NUMA
-        void* gate_proj_ptr = (uint8_t*)gate_proj_numa_[Backend::numa_node] + 
-                              (expert_id * config_.intermediate_size + ith * config_.stride) * 
-                                config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
-        #else
-        void* gate_proj_ptr = (uint8_t*)gate_proj_ + 
-                              (expert_id * config_.intermediate_size + ith * config_.stride) * 
-                                config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
-        #endif
+        // 计算每元素字节数
+        size_t gate_unit_bytes = config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
+        void* gate_proj_ptr;
+        if (config_.use_external_proj) {
+            void* base = mem_manager_->getGate(expert_id);
+            gate_proj_ptr = (uint8_t*)base + ith * config_.stride * gate_unit_bytes;
+        } else {
+            #ifdef USE_NUMA
+            gate_proj_ptr = (uint8_t*)gate_proj_numa_[Backend::numa_node] + (expert_idx * config_.intermediate_size + ith * config_.stride) * gate_unit_bytes;
+            #else
+            gate_proj_ptr = (uint8_t*)gate_proj_ + (expert_idx * config_.intermediate_size + ith * config_.stride) * gate_unit_bytes;
+            #endif
+        }
 
         float* gate_output_ptr = s_gate_output_[expert_idx] + ith * config_.stride;
         llamafile_sgemm(
@@ -223,15 +214,18 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
             GGML_TYPE_F32, GGML_PREC_DEFAULT
         );
 
-        #ifdef USE_NUMA
-        void* up_proj_ptr = (uint8_t*)up_proj_numa_[Backend::numa_node] +
-                            (expert_id * config_.intermediate_size + ith * config_.stride) * 
-                                config_.hidden_size * ggml_type_size(config_.up_type) / ggml_blck_size(config_.up_type);
-        #else
-        void* up_proj_ptr = (uint8_t*)up_proj_ + 
-                            (expert_id * config_.intermediate_size + ith * config_.stride) * 
-                                config_.hidden_size * ggml_type_size(config_.up_type) / ggml_blck_size(config_.up_type);
-        #endif
+        size_t up_unit_bytes = config_.hidden_size * ggml_type_size(config_.up_type) / ggml_blck_size(config_.up_type);
+        void* up_proj_ptr;
+        if (config_.use_external_proj) {
+            void* base = mem_manager_->getUp(expert_id);
+            up_proj_ptr = (uint8_t*)base + ith * config_.stride * up_unit_bytes;
+        } else {
+            #ifdef USE_NUMA
+            up_proj_ptr = (uint8_t*)up_proj_numa_[Backend::numa_node] + (expert_idx * config_.intermediate_size + ith * config_.stride) * up_unit_bytes;
+            #else
+            up_proj_ptr = (uint8_t*)up_proj_ + (expert_idx * config_.intermediate_size + ith * config_.stride) * up_unit_bytes;
+            #endif
+        }
 
         float* up_output_ptr = s_up_output_[expert_idx] + ith * config_.stride;
         llamafile_sgemm(
@@ -272,15 +266,19 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
         for (int expert_idx = 0; expert_idx < k; expert_idx++) {
             uint64_t expert_id = expert_ids[expert_idx];
 
-            #ifdef USE_NUMA
-            void* down_proj_ptr = (uint8_t*)down_proj_numa_[Backend::numa_node] + 
-                                  (expert_id * config_.hidden_size + ith * config_.stride) * 
-                                    config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
-            #else
-            void* down_proj_ptr = (uint8_t*)down_proj_ + 
-                                  (expert_id * config_.hidden_size + ith * config_.stride) * 
-                                    config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
-            #endif
+            // 计算每元素字节数
+            size_t down_unit_bytes = config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
+            void* down_proj_ptr;
+            if (config_.use_external_proj) {
+                void* base = mem_manager_->getDown(expert_id);
+                down_proj_ptr = (uint8_t*)base + ith * config_.stride * down_unit_bytes;
+            } else {
+                #ifdef USE_NUMA
+                down_proj_ptr = (uint8_t*)down_proj_numa_[Backend::numa_node] + (expert_id * config_.hidden_size + ith * config_.stride) * config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
+                #else
+                down_proj_ptr = (uint8_t*)down_proj_ + (expert_id * config_.hidden_size + ith * config_.stride) * config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
+                #endif
+            }
             
             float* down_output_ptr = s_down_output_[expert_idx] + ith * config_.stride;
             llamafile_sgemm(
@@ -308,9 +306,15 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
     if (config_.stride % ggml_blck_size(config_.hidden_type) != 0) {
         from_float(s_output_fp32_, output, config_.hidden_size, config_.hidden_type);
     }
+    if (config_.use_external_proj) {
+        for (int idx = 0; idx < k; ++idx) {
+            mem_manager_->unload(expert_ids[idx]);
+        }
+    }
 }
 
 void MOE::forward_many(int qlen, int k, const uint64_t* expert_ids, const float* weights, const void* input, void* output, Backend* backend) {
+    assert(false);
     for (int i = 0; i < config_.expert_num; i++) {
         m_local_num_[i] = 0;
     }

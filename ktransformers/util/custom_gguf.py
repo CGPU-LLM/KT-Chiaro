@@ -301,8 +301,8 @@ class GGUFLoader:
         item_count = t["item_count"]
         itemsize = int(np.empty([], dtype = item_type).itemsize)
         bytes_to_read = itemsize * item_count
-
-        debug_log("get_mmap_tensor: Reading tensor '%s' from file '%s', offset %d, bytes %d",
+        if "_exps" in name:
+            debug_log("get_mmap_tensor: Reading tensor '%s' from file '%s', offset %d, bytes %d",
                   name, file_path, offset, bytes_to_read)
 
         return mmap_data[offset : offset + bytes_to_read]

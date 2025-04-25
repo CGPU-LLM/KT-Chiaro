@@ -233,8 +233,14 @@ add_compile_options("$<$<COMPILE_LANGUAGE:C>:${ARCH_FLAGS}>")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/pybind11 ${CMAKE_CURRENT_BINARY_DIR}/third_party/pybind11)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/llama.cpp ${CMAKE_CURRENT_BINARY_DIR}/third_party/llama.cpp)
 
+# Include project sources and dependencies
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/debug)
+# Add include paths for extension headers
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpu_backend)
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/operators/llamafile)
+
 if (WIN32)
     include_directories("$ENV{CUDA_PATH}/include")
     add_compile_definitions(KTRANSFORMERS_USE_CUDA=1)
