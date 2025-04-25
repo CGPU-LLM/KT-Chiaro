@@ -254,10 +254,14 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
             tokens.append(int(next_token))
             seq_length += 1
             if next_token[0].item() == tokenizer.eos_token_id or tokenizer.decode(next_token.tolist()) == '<|im_end|>':
-                print(stream.end(), end="", flush=True)
+                sc = stream.end()
+                print(sc, end="", flush=True)
+                realcontent += sc
                 break
             else:
-                print(stream.put(next_token.item()), end="", flush=True)
+                sc = stream.put(next_token.item())
+                print(sc, end="", flush=True)
+                realcontent += sc
             cache_position += 1
             position_ids = cache_position.unsqueeze(0)
         
@@ -266,7 +270,7 @@ def prefill_and_generate(model, tokenizer, inputs, max_new_tokens=10000, use_cud
     tokens_generated = len(tokens)
     tokens_per_second = tokens_generated / total_time
 
-    print("")
+    print("real content: ", realcontent)
 
     print(f"prompt eval count:    {prefill_count} token(s)")
     print(f"prompt eval duration: {prefill_time}s")
