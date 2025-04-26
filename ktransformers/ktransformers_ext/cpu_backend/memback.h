@@ -36,11 +36,11 @@ private:
         void* gate;
         void* up;
         void* down;
+        std::mutex mtx;  // 每个专家的锁，保护该专家的状态和指针
     };
 
     MOEConfig config_;
     std::vector<Entry> entries_;  // 大小 = expert_num
-    std::mutex mutex_;            // 保护 load/unload
 };
 
 } // namespace cpu_backend
