@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <cassert>
 #include <cstdio>
-#include <thread>  // 新增线程支持以并行加载/卸载专家
+#include <thread>
 
 #ifdef USE_NUMA
 #include <numa.h>
@@ -310,7 +310,6 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
         from_float(s_output_fp32_, output, config_.hidden_size, config_.hidden_type);
     }
     if (config_.use_external_proj) {
-        // 并行卸载已加载专家 (使用 Backend I/O 任务)
         backend->do_io_tasks(k,
             [this, expert_ids](int idx) {
                 mem_manager_->unload(expert_ids[idx]);

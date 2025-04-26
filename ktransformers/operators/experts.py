@@ -38,6 +38,7 @@ from ktransformers.operators.cpuinfer import CPUInfer
 
 from ktransformers.operators.debugger import log_function_call
 import time
+from ktransformers.util.debug_utils import debug_log
 
 # class Base(BaseInjectedModule, ABC):
 class KExpertsBase(ABC):
@@ -144,7 +145,7 @@ class KExpertsCPU(KExpertsBase):
         self.n_routed_experts = n_routed_experts
         self.out_device = out_device
 
-    @log_function_call
+    # @log_function_call
     def load(self, w: dict | nn.Parameter | tuple | None = None, device:str|None = None, warmup:bool = False):
 
         if device:
@@ -181,6 +182,7 @@ class KExpertsCPU(KExpertsBase):
         down_file = self.gguf_loader.get_tensor_file(down_name)
         down_offset = self.gguf_loader.get_tensor_offset(down_name)
         # hidden_type 暂用固定值，后续可从模型配置获取
+        print(f'n_routed_experts = {n_routed_experts}, num_experts_per_tok = {self.config.num_experts_per_tok}')
         moe_config = MOEConfig(
             n_routed_experts,
             self.config.num_experts_per_tok,
@@ -213,7 +215,7 @@ class KExpertsCPU(KExpertsBase):
             KExpertsCPU.weights_cpu = torch.zeros((num_experts_per_tok), device="cpu", dtype=torch.float32, pin_memory=True)
             KExpertsCPU.output_cpu = torch.zeros((self.config.hidden_size), device="cpu", pin_memory=True, dtype=torch.bfloat16)
 
-    @log_function_call
+    # @log_function_call
     def submit_for_one_decode(self, input_tensor, expert_ids, weights):
         KExpertsCPU.input_tensor_cpu.copy_(input_tensor, non_blocking=True)
         KExpertsCPU.expert_ids_cpu.copy_(expert_ids, non_blocking=True)
@@ -231,13 +233,13 @@ class KExpertsCPU(KExpertsBase):
             )
         )
 
-    @log_function_call
+    # @log_function_call
     def sync_for_one_decode(self):
         self.cpu_infer.sync_with_cuda_stream(torch.cuda.current_stream(self.out_device).cuda_stream)
         KExpertsCPU.output_gpu_map[self.out_device].copy_(KExpertsCPU.output_cpu, non_blocking=True)
         return KExpertsCPU.output_gpu_map[self.out_device]
 
-    @log_function_call
+    # @log_function_call
     def forward(self, input_tensor, expert_ids, weights):
         # generate, capture and run cuda graph
         # print(f'>>> expert_ids: {expert_ids}')
@@ -288,7 +290,7 @@ class KExpertsCPU(KExpertsBase):
     def unload(self):
         return
 
-    @log_function_call
+    # @log_function_call
     def load_weights(self, override_key: str | None = None, device: str = "cpu"):
         # TODO: support Bias
         res = {}
@@ -622,7 +624,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         self.cpu_mlp_type = generate_op
         self.mode = InferenceState.UNLOAD
 
-    @log_function_call
+    # @log_function_call
     def load(self, w: dict = None,  mode: InferenceState = None, warmup: bool = True):
         # TODO support w as input
         # print(f"\n>>>> KTransformersExperts load {self.generate_experts.device}, {self.prefill_experts.device}")
@@ -644,7 +646,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         else:
             raise ValueError("mode must be either InferenceState.GENERATE, InferenceState.PREFILL or InferenceState.UNLOAD")
 
-    @log_function_call
+    # @log_function_call
     def unload(self):
         if self.generate_experts is not None:
             self.generate_experts.unload()
@@ -652,7 +654,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
             self.prefill_experts.unload()
         self.device = self.generate_experts.device
 
-    @log_function_call
+    # @log_function_call
     def forward(self, input_tensor, expert_ids, weights):
         # print("\n>>>> KTransformersExperts forward")
         if self.mode == InferenceState.GENERATE:
@@ -664,7 +666,7 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         else:
             raise ValueError("load or set_inference_mode before forward")
 
-    @log_function_call
+    # @log_function_call
     def set_inference_mode(self, mode: InferenceState):
         if mode == InferenceState.GENERATE:
             self.load(mode=InferenceState.GENERATE, warmup=False)
