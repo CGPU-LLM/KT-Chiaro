@@ -30,8 +30,8 @@ ExpertMemoryManager::~ExpertMemoryManager() {
 void ExpertMemoryManager::load(int expert_id) {
     // printf("[C++] ExpertMemoryManager load: expert_id = %d\n", expert_id);
     if (expert_id < 0 || expert_id >= config_.expert_num) return;
-    std::lock_guard<std::mutex> lock(mutex_);
     auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
     if (ent.loaded) return;
     // printf("[C++] Need to load expert %d\n", expert_id);
     // Gate 大小
@@ -70,8 +70,8 @@ void ExpertMemoryManager::load(int expert_id) {
 void ExpertMemoryManager::unload(int expert_id) {
     // printf("[C++] ExpertMemoryManager unload: expert_id = %d\n", expert_id);
     if (expert_id < 0 || expert_id >= config_.expert_num) return;
-    std::lock_guard<std::mutex> lock(mutex_);
     auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
     if (!ent.loaded) return;
     free(ent.gate);
     free(ent.up);
@@ -83,25 +83,28 @@ void ExpertMemoryManager::unload(int expert_id) {
 void* ExpertMemoryManager::getGate(int expert_id) {
     // printf("[C++] ExpertMemoryManager getGate: expert_id = %d (config file = %s)\n", expert_id, config_.gate_proj_file.c_str());
     if (expert_id < 0 || expert_id >= config_.expert_num) return nullptr;
-    std::lock_guard<std::mutex> lock(mutex_);
-    assert(entries_[expert_id].loaded);
-    return entries_[expert_id].gate;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    assert(ent.loaded);
+    return ent.gate;
 }
 
 void* ExpertMemoryManager::getUp(int expert_id) {
     // printf("[C++] ExpertMemoryManager getUp: expert_id = %d (config file = %s)\n", expert_id, config_.up_proj_file.c_str());
     if (expert_id < 0 || expert_id >= config_.expert_num) return nullptr;
-    std::lock_guard<std::mutex> lock(mutex_);
-    assert(entries_[expert_id].loaded);
-    return entries_[expert_id].up;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    assert(ent.loaded);
+    return ent.up;
 }
 
 void* ExpertMemoryManager::getDown(int expert_id) {
     // printf("[C++] ExpertMemoryManager getDown: expert_id = %d (config file = %s)\n", expert_id, config_.down_proj_file.c_str());
     if (expert_id < 0 || expert_id >= config_.expert_num) return nullptr;
-    std::lock_guard<std::mutex> lock(mutex_);
-    assert(entries_[expert_id].loaded);
-    return entries_[expert_id].down;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    assert(ent.loaded);
+    return ent.down;
 }
 
 } // namespace cpu_backend

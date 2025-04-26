@@ -152,3 +152,8 @@ void Backend::worker_thread(int thread_id) {
         }
     }
 }
+
+// Execute I/O tasks (load/unload) using the existing thread pool and block until completion
+void Backend::do_io_tasks(int task_num, std::function<void(int)> io_func) {
+    do_work_stealing_job(task_num, nullptr, io_func, nullptr);
+}
