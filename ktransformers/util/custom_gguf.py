@@ -168,6 +168,7 @@ DATA_TYPES = {
 }
 
 class GGUFLoader:
+    TMP_TOTAL = 0
     tensor_info: dict
     gguf_path: str
     tensor_file_map: dict # {tensor_name: tensor_file_path}
@@ -301,9 +302,11 @@ class GGUFLoader:
         item_count = t["item_count"]
         itemsize = int(np.empty([], dtype = item_type).itemsize)
         bytes_to_read = itemsize * item_count
-        if "_exps" in name:
-            debug_log("get_mmap_tensor: Reading tensor '%s' from file '%s', offset %d, bytes %d",
-                  name, file_path, offset, bytes_to_read)
+        # if not ("._exps" in name):
+        GGUFLoader.TMP_TOTAL += bytes_to_read
+            # debug_log("get_mmap_tensor: Reading tensor '%s' from file '%s', offset %d, bytes %d",
+                #   name, file_path, offset, bytes_to_read)
+        debug_log(f"TMP_TOTAL: {GGUFLoader.TMP_TOTAL}")
 
         return mmap_data[offset : offset + bytes_to_read]
     

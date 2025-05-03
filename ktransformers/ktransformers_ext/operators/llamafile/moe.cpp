@@ -19,6 +19,8 @@
 #include <numaif.h>
 #endif
 
+#include "debug.h"
+
 #define HIDDEN_GAP (config_.hidden_size * ggml_type_size(config_.hidden_type) / ggml_blck_size(config_.hidden_type))
 
 MOE::MOE(MOEConfig config) {
@@ -81,40 +83,40 @@ MOE::MOE(MOEConfig config) {
     s_mem_requests.push_back({(void**)&s_output_fp32_, sizeof(float) * config_.hidden_size});
     shared_mem_buffer.alloc(this, s_mem_requests);
 
-    std::vector<std::pair<void**, uint64_t>> m_mem_requests;
-    m_input_fp32_.resize(config_.group_max_len);
-    m_gate_input_.resize(config_.group_max_len);
-    m_up_input_.resize(config_.group_max_len);
-    for (int i = 0; i < config_.group_max_len; i++) {
-        m_mem_requests.push_back({(void**)&m_input_fp32_[i], sizeof(float) * config_.hidden_size});
-        m_mem_requests.push_back({(void**)&m_gate_input_[i], config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type)});
-        m_mem_requests.push_back({(void**)&m_up_input_[i], config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type)});
-    }
-    m_mem_requests.push_back({(void**)&m_local_gate_input_, config_.routed_expert_num * config_.group_max_len * config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type)});
-    m_mem_requests.push_back({(void**)&m_local_up_input_, config_.routed_expert_num * config_.group_max_len * config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type)});
-    m_mem_requests.push_back({(void**)&m_local_gate_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
-    m_mem_requests.push_back({(void**)&m_local_up_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
-    m_mem_requests.push_back({(void**)&m_local_intermediate_fp32_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
-    m_mem_requests.push_back({(void**)&m_local_down_input_, config_.routed_expert_num * config_.group_max_len * config_.intermediate_size * ggml_type_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type)});
-    m_mem_requests.push_back({(void**)&m_local_down_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.hidden_size});
-    m_output_fp32_.resize(config_.group_max_len);
-    for (int i = 0; i < config_.group_max_len; i++) {
-        m_mem_requests.push_back({(void**)&m_output_fp32_[i], sizeof(float) * config_.hidden_size});
-    }
-    shared_mem_buffer.alloc(this, m_mem_requests);
+    // std::vector<std::pair<void**, uint64_t>> m_mem_requests;
+    // m_input_fp32_.resize(config_.group_max_len);
+    // m_gate_input_.resize(config_.group_max_len);
+    // m_up_input_.resize(config_.group_max_len);
+    // for (int i = 0; i < config_.group_max_len; i++) {
+    //     m_mem_requests.push_back({(void**)&m_input_fp32_[i], sizeof(float) * config_.hidden_size});
+    //     m_mem_requests.push_back({(void**)&m_gate_input_[i], config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type)});
+    //     m_mem_requests.push_back({(void**)&m_up_input_[i], config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type)});
+    // }
+    // m_mem_requests.push_back({(void**)&m_local_gate_input_, config_.routed_expert_num * config_.group_max_len * config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.gate_type).vec_dot_type)});
+    // m_mem_requests.push_back({(void**)&m_local_up_input_, config_.routed_expert_num * config_.group_max_len * config_.hidden_size * ggml_type_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.up_type).vec_dot_type)});
+    // m_mem_requests.push_back({(void**)&m_local_gate_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
+    // m_mem_requests.push_back({(void**)&m_local_up_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
+    // m_mem_requests.push_back({(void**)&m_local_intermediate_fp32_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.intermediate_size});
+    // m_mem_requests.push_back({(void**)&m_local_down_input_, config_.routed_expert_num * config_.group_max_len * config_.intermediate_size * ggml_type_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type) / ggml_blck_size(ggml_internal_get_type_traits(config_.down_type).vec_dot_type)});
+    // m_mem_requests.push_back({(void**)&m_local_down_output_, sizeof(float) * config_.routed_expert_num * config_.group_max_len * config_.hidden_size});
+    // m_output_fp32_.resize(config_.group_max_len);
+    // for (int i = 0; i < config_.group_max_len; i++) {
+    //     m_mem_requests.push_back({(void**)&m_output_fp32_[i], sizeof(float) * config_.hidden_size});
+    // }
+    // shared_mem_buffer.alloc(this, m_mem_requests);
 
-    m_local_pos_.resize(config_.group_max_len);
-    for (int i = 0; i < config_.group_max_len; i++) {
-        m_local_pos_[i].resize(config_.routed_expert_num);
-    }
-    m_local_num_.resize(config_.expert_num);
-    m_local_gate_input_ptr_.resize(config_.expert_num);
-    m_local_up_input_ptr_.resize(config_.expert_num);
-    m_local_gate_output_ptr_.resize(config_.expert_num);
-    m_local_up_output_ptr_.resize(config_.expert_num);
-    m_local_intermediate_fp32_ptr_.resize(config_.expert_num);
-    m_local_down_input_ptr_.resize(config_.expert_num);
-    m_local_down_output_ptr_.resize(config_.expert_num);
+    // m_local_pos_.resize(config_.group_max_len);
+    // for (int i = 0; i < config_.group_max_len; i++) {
+    //     m_local_pos_[i].resize(config_.routed_expert_num);
+    // }
+    // m_local_num_.resize(config_.expert_num);
+    // m_local_gate_input_ptr_.resize(config_.expert_num);
+    // m_local_up_input_ptr_.resize(config_.expert_num);
+    // m_local_gate_output_ptr_.resize(config_.expert_num);
+    // m_local_up_output_ptr_.resize(config_.expert_num);
+    // m_local_intermediate_fp32_ptr_.resize(config_.expert_num);
+    // m_local_down_input_ptr_.resize(config_.expert_num);
+    // m_local_down_output_ptr_.resize(config_.expert_num);
 }
 
 MOE::~MOE() {
@@ -175,9 +177,12 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
             }
         }
     }
-    // 如果使用外部文件存储的专家权重，预加载所需专家
+    // debug_printf("[C++] forward begin load experts: ");
+    // for (int i = 0; i < k; i++) {
+    //     debug_printf("%d ", expert_ids[i]);
+    // }
+    // debug_printf("\n");
     if (config_.use_external_proj) {
-        // 并行加载所需专家 (使用 Backend I/O 任务)
         backend->do_io_tasks(k,
             [this, expert_ids](int idx) {
                 mem_manager_->load(expert_ids[idx]);

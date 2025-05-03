@@ -155,7 +155,7 @@ def local_chat(
             if prompt_file != None:
                 content = open(prompt_file, "r").read()
             else:
-                content = "Please write a piece of quicksort code in C++."
+                content = "Who are you?"
         elif os.path.isfile(content):
             content = open(content, "r").read()
             
