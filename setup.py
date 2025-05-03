@@ -406,8 +406,12 @@ if CUDA_HOME is not None or ROCM_HOME is not None:
     ],
     extra_compile_args={
             'cxx': ['-O3', '-DKTRANSFORMERS_USE_CUDA'],
+            # 'cxx': ['-DKTRANSFORMERS_USE_CUDA', '-g', '-O3'],
             'nvcc': [
                 '-O3',
+                # '-O0',
+                # '-g',
+                # '-G',
                 # '--use_fast_math',
                 '-Xcompiler', '-fPIC',
                 '-DKTRANSFORMERS_USE_CUDA',
@@ -429,9 +433,12 @@ elif MUSA_HOME is not None:
         # 'ktransformers/ktransformers_ext/cuda_musa/gptq_marlin/gptq_marlin.mu'
     ],
     extra_compile_args={
+            # 'cxx': ['force_mcc', '-g'],
             'cxx': ['force_mcc'],
             'mcc': [
                 '-O3',
+                # '-O0',
+                # '-g',
                 '-DKTRANSFORMERS_USE_MUSA',
                 '-DTHRUST_IGNORE_CUB_VERSION_CHECK',
             ]
