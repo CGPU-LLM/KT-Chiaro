@@ -438,6 +438,7 @@ void MOE::forward_many(int qlen, int k, const uint64_t* expert_ids, const float*
 
 void MOE::forward(int qlen, int k, const uint64_t* expert_ids, const float* weights, const void* input, void* output, Backend* backend) {
     // std::cout << "GET IN NEW VERSION FORWARD: qlen = " << qlen << ", k = " << k << ", hidden = " << config_.hidden_size << ", gts(hidden) = " << ggml_type_size(config_.hidden_type) << ", gbs(hidden) = " << ggml_blck_size(config_.hidden_type) << std::endl;
+    debug_printf("[C++]: FORWARD: qlen = %d, k = %d\n", qlen, k);
     if (true) {
     // if (qlen < config_.group_min_len) {
         for (int i = 0; i < qlen; i++) {

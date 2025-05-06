@@ -12,11 +12,17 @@ ExpertMemoryManager::ExpertMemoryManager(const MOEConfig& config)
       gate_pool_(pool_size_, nullptr),
       up_pool_(pool_size_, nullptr),
       down_pool_(pool_size_, nullptr) {
-    printf("[C++]: input the size of memory pool: ");
-    scanf("%d", &pool_size_);
-    gate_pool_.resize(pool_size_);
-    up_pool_.resize(pool_size_);
-    down_pool_.resize(pool_size_);
+    if(!noInputFlag) {
+        printf("[C++]: input the size of memory pool: ");
+        scanf("%d", &pool_size_);
+        if(pool_size_ == 0) {
+            pool_size_ = config.routed_expert_num;
+            noInputFlag = 1;
+        }
+        gate_pool_.resize(pool_size_);
+        up_pool_.resize(pool_size_);
+        down_pool_.resize(pool_size_);
+    }
     
     size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size *
         ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);

@@ -1,3 +1,8 @@
+import os
+try:
+    open(os.path.join(os.getcwd(), 'call.log'), 'w').close()
+except Exception:
+    pass
 import functools
 import torch
 
@@ -17,7 +22,11 @@ def log_function_call(func):
                 if isinstance(arg, torch.Tensor):
                     arg_info.append(f"Tensor(shape={arg.shape}, dtype={arg.dtype}, device={arg.device})")
                 else:
-                    arg_info.append(str(arg))
+                    try:
+                        arg_info.append(str(arg))
+                    except Exception:
+                        # fallback to type name if repr fails
+                        arg_info.append(f"{type(arg).__name__}")
             
             # 类似地处理关键字参数
             kwarg_info = {}
@@ -25,7 +34,11 @@ def log_function_call(func):
                 if isinstance(v, torch.Tensor):
                     kwarg_info[k] = f"Tensor(shape={v.shape}, dtype={v.dtype}, device={v.device})"
                 else:
-                    kwarg_info[k] = str(v)
+                    try:
+                        kwarg_info[k] = str(v)
+                    except Exception:
+                        # fallback to type name if repr fails
+                        kwarg_info[k] = f"{type(v).__name__}"
             
             f.write(f"Args: {arg_info}\n")
             f.write(f"Kwargs: {kwarg_info}\n")

@@ -10,6 +10,8 @@
 
 namespace cpu_backend {
 
+static int noInputFlag = 0;
+
 class ExpertMemoryManager {
 public:
     explicit ExpertMemoryManager(const MOEConfig& config);
