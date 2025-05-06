@@ -66,6 +66,8 @@ from ktransformers.models.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 
+from ktransformers.operators.debugger import log_function_call
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -184,6 +186,7 @@ class KQwen2MoeModel(BaseInjectedModule):
         config: Qwen2MoeConfig
     """
 
+    @log_function_call
     def __init__(
         self,
         key: str,
@@ -203,6 +206,7 @@ class KQwen2MoeModel(BaseInjectedModule):
         self.stream_device_map = dict()
 
     @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
+    @log_function_call
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -422,6 +426,7 @@ class KQwen2MoeModel(BaseInjectedModule):
             router_logits=all_router_logits,
         )
 
+    @log_function_call
     def load_layer_to(self, layer: Qwen2MoeDecoderLayer, target: InferenceState):
         assert isinstance(
             layer, Qwen2MoeDecoderLayer

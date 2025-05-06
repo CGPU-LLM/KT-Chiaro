@@ -67,9 +67,13 @@ bool LRUQueue::update(int expert_id) {
     assert(experts_total > expert_id);
     if (vis[expert_id] == 1) {
         refresh(expert_id);
+        debug_printf("[C++]: refresh: expert_id = %d\n", expert_id);
+        __debug_print();
         return true;
     } else {
         push(expert_id);
+        debug_printf("[C++]: push: expert_id = %d\n", expert_id);
+        __debug_print();
         return false;
     }
 }

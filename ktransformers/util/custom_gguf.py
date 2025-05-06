@@ -306,7 +306,7 @@ class GGUFLoader:
         GGUFLoader.TMP_TOTAL += bytes_to_read
             # debug_log("get_mmap_tensor: Reading tensor '%s' from file '%s', offset %d, bytes %d",
                 #   name, file_path, offset, bytes_to_read)
-        debug_log(f"TMP_TOTAL: {GGUFLoader.TMP_TOTAL}")
+        # debug_log(f"TMP_TOTAL: {GGUFLoader.TMP_TOTAL}")
 
         return mmap_data[offset : offset + bytes_to_read]
     

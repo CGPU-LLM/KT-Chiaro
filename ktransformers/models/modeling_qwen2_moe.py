@@ -59,6 +59,8 @@ from transformers.utils import (
 )
 from transformers.models.qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
 
+from ktransformers.util.debug_utils import debug_log
+from ktransformers.operators.debugger import log_function_call
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
@@ -806,6 +808,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
+        debug_log("Qwen2MoeSparseMoeBlock: __init__: num_experts = %d, top_k = %d, norm_topk_prob = %d", self.num_experts, self.top_k, self.norm_topk_prob);
 
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
@@ -1088,15 +1091,17 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         config: Qwen2MoeConfig
     """
 
+    @log_function_call
     def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
+        debug_log(f"Qwen2MoeModel: __init__: padding_idx = {self.padding_idx}, vocab_size = {self.vocab_size}, hidden_size = {config.hidden_size}, num_hidden_layers = {config.num_hidden_layers}");
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [Qwen2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        debug_log(f"layers: {self.layers}");
         self._attn_implementation = config._attn_implementation
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1104,12 +1109,15 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @log_function_call
     def get_input_embeddings(self):
         return self.embed_tokens
 
+    @log_function_call
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @log_function_call
     @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1244,6 +1252,7 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
         )
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    @log_function_call
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1330,6 +1339,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        debug_log(f"GET IN Qwen2MoeForCausalLM: __init__")
         self.model = Qwen2MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
