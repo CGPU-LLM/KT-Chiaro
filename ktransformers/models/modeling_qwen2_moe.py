@@ -875,8 +875,10 @@ class Qwen2MoeDecoderLayer(nn.Module):
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
+            debug_log(f"In Decoder Layer: __init__: choose sparse moe block, layer_idx = {layer_idx}, config.num_experts = {config.num_experts}, config.decoder_sparse_step = {config.decoder_sparse_step}");
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
+            debug_log(f"In Decoder Layer: __init__: choose dense moe block, layer_idx = {layer_idx}, config.num_experts = {config.num_experts}, config.decoder_sparse_step = {config.decoder_sparse_step}");
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
 
         self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

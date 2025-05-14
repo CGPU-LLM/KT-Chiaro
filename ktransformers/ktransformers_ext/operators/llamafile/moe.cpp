@@ -437,7 +437,12 @@ void MOE::forward_many(int qlen, int k, const uint64_t* expert_ids, const float*
 }
 
 void MOE::forward(int qlen, int k, const uint64_t* expert_ids, const float* weights, const void* input, void* output, Backend* backend) {
-    // std::cout << "GET IN NEW VERSION FORWARD: qlen = " << qlen << ", k = " << k << ", hidden = " << config_.hidden_size << ", gts(hidden) = " << ggml_type_size(config_.hidden_type) << ", gbs(hidden) = " << ggml_blck_size(config_.hidden_type) << std::endl;
+    // 记录当前层ID
+    if (config_.layer_id >= 0) {
+        moe_tracker::moe_tracker_set_current_layer(config_.layer_id);
+    }
+    
+    // 原有的代码
     debug_printf("[C++]: FORWARD: qlen = %d, k = %d\n", qlen, k);
     if (true) {
     // if (qlen < config_.group_min_len) {

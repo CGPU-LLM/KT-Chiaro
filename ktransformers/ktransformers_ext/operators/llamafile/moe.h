@@ -28,6 +28,7 @@
 #include "shared_mem_buffer.h"
 #include "../../cpu_backend/memback.h"
 #include "moe_config.h"
+#include "../../moe_tracker.h"
 
 class MOE {
    public:

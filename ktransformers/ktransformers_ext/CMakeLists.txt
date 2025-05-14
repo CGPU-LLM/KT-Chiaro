@@ -332,3 +332,17 @@ if (NUMA_LIBRARY AND USE_NUMA)
 else()
     message(STATUS "NUMA library not found or user not set USE_NUMA - disabling NUMA support")
 endif()
+
+list(APPEND SRCS
+    ext_bindings.cpp 
+    cpu_backend/backend.cpp
+    cpu_backend/cpuinfer.cpp
+    cpu_backend/memback.cpp
+    cpu_backend/task_queue.cpp
+    operators/kvcache/kvcache.cpp
+    operators/llamafile/conversion.cpp
+    operators/llamafile/linear.cpp
+    operators/llamafile/mlp.cpp
+    operators/llamafile/moe.cpp
+    moe_tracker.cpp
+)
