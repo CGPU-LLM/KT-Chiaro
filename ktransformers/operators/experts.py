@@ -153,9 +153,7 @@ class KExpertsCPU(KExpertsBase):
         
         if w is None: 
             w = self.load_weights()[self.key]
-        # print('before load weights')
-        # os.system("vmtouch -v /home/chiarolrg/work/ktbackup/down_gguf/qwen2-57b-a14b-instruct/qwen2-57b-a14b-instruct-q4_k_m.gguf")
-        # 计算并输出self.属性赋值的时间
+        
         start_time = time.time()
         self.gate = w["gate"]
         self.up = w["up"]
@@ -163,43 +161,34 @@ class KExpertsCPU(KExpertsBase):
         self.gate_type = w["gate_type"]
         self.up_type = w["up_type"]
         self.down_type = w["down_type"]
-        # end_time = time.time()
-        # print(f"属性赋值时间: {end_time - start_time:.8f}秒")
-
-        # print(f'||| >>> device: {self.gate.device}, {self.up.device}, {self.down.device}')
         
-        # 使用外部文件路径和偏移量初始化 MOEConfig
-        n_routed_experts = self.n_routed_experts
-        # 构造 tensor 名称
-        gate_name = f"{self.key}.ffn_gate_exps.weight"
-        up_name = f"{self.key}.ffn_up_exps.weight"
-        down_name = f"{self.key}.ffn_down_exps.weight"
-        # 获取文件路径和偏移量
-        gate_file = self.gguf_loader.get_tensor_file(gate_name)
-        gate_offset = self.gguf_loader.get_tensor_offset(gate_name)
-        up_file = self.gguf_loader.get_tensor_file(up_name)
-        up_offset = self.gguf_loader.get_tensor_offset(up_name)
-        down_file = self.gguf_loader.get_tensor_file(down_name)
-        down_offset = self.gguf_loader.get_tensor_offset(down_name)
-        # hidden_type 暂用固定值，后续可从模型配置获取
-        print(f'n_routed_experts = {n_routed_experts}, num_experts_per_tok = {self.config.num_experts_per_tok}')
+        from ktransformers.operators.moe_tracker import get_moe_tracker
+        moe_tracker = get_moe_tracker()
+        layer_id = moe_tracker.get_layer_id(self.key + '.mlp')
+        print(f'n_routed_experts = {self.n_routed_experts}, num_experts_per_tok = {self.config.num_experts_per_tok}, layer_id = {layer_id}')
+        
         moe_config = MOEConfig(
-            n_routed_experts,
+            self.n_routed_experts,
             self.config.num_experts_per_tok,
             self.config.hidden_size,
             self.config.moe_intermediate_size,
             64,
             10,
             1024,
-            gate_file, gate_offset,
-            up_file, up_offset,
-            down_file, down_offset,
+            self.gguf_loader.get_tensor_file(f"{self.key}.ffn_gate_exps.weight"),
+            self.gguf_loader.get_tensor_offset(f"{self.key}.ffn_gate_exps.weight"),
+            self.gguf_loader.get_tensor_file(f"{self.key}.ffn_up_exps.weight"),
+            self.gguf_loader.get_tensor_offset(f"{self.key}.ffn_up_exps.weight"),
+            self.gguf_loader.get_tensor_file(f"{self.key}.ffn_down_exps.weight"),
+            self.gguf_loader.get_tensor_offset(f"{self.key}.ffn_down_exps.weight"),
             self.gate_type,
             self.up_type,
             self.down_type,
             30,
+            layer_id,  # 传入层ID
         )
-        # print(n_routed_experts, hidden_size, moe_intermediate_size)
+        print(f'KExpertsCPU layer_id = {layer_id}')
+        
         num_experts_per_tok = self.config.num_experts_per_tok
         self.moe = MOE(moe_config)
         self.cpu_infer = KExpertsCPU.CPU_INFER
@@ -612,12 +601,19 @@ class KTransformersExperts(BaseInjectedModule, KExpertsBase):
         # print("\n>>>> KTransformersExperts __init__")
         BaseInjectedModule.__init__(self, key, gguf_loader, config, orig_module, prefill_device, generate_device, **kwargs)
         KExpertsBase.__init__(self, key, gguf_loader, config, orig_module, generate_device, **kwargs)
+        
+        # 如果原始模块有layer_id，记录下来
+        if hasattr(orig_module, 'layer_id'):
+            self.layer_id = orig_module.layer_id
+            
         if generate_op is not None:
-            self.generate_experts = EXPERTS_MAP[generate_op](key, gguf_loader, config, len(orig_module), device=generate_device, **kwargs)
+            self.generate_experts = EXPERTS_MAP[generate_op](key, gguf_loader, config, len(orig_module), 
+                                                           device=generate_device, orig_module=orig_module, **kwargs)
         else:
             self.generate_experts = None
         if prefill_op is not None:
-            self.prefill_experts = EXPERTS_MAP[prefill_op](key, gguf_loader, config, len(orig_module), device=prefill_device, **kwargs)
+            self.prefill_experts = EXPERTS_MAP[prefill_op](key, gguf_loader, config, len(orig_module), 
+                                                         device=prefill_device, orig_module=orig_module, **kwargs)
         else:
             self.prefill_experts = None
         self.gpu_mlp_type = prefill_op
@@ -685,6 +681,54 @@ from ktransformers.models.modeling_mixtral import MixtralSparseMoeBlock
 
 
 class KQwen2MoeSparseMoeBlock(BaseInjectedModule, Qwen2MoeSparseMoeBlock):
+    def __init__(self, *args, **kwargs):
+        # 调用父类初始化
+        super().__init__(*args, **kwargs)
+        
+        # 获取层索引：优先尝试三种方式：kwargs -> key解析 -> 调用栈inspect
+        layer_idx = None
+        # 1. 尝试从注入参数获取
+        if 'layer_idx' in kwargs:
+            try:
+                layer_idx = int(kwargs['layer_idx'])
+            except Exception:
+                layer_idx = -1
+        # 2. 尝试从self.key解析
+        if layer_idx is None:
+            parts = self.key.split('.')
+            if 'layers' in parts:
+                idx = parts.index('layers')
+                if idx + 1 < len(parts):
+                    try:
+                        layer_idx = int(parts[idx + 1])
+                    except Exception:
+                        layer_idx = None
+        # 3. 若仍未获取或为负，则从调用栈查找
+        if layer_idx is None or layer_idx < 0:
+            import inspect
+            for frame_info in inspect.stack():
+                if frame_info.function == 'Qwen2MoeDecoderLayer' and 'layer_idx' in frame_info.frame.f_locals:
+                    try:
+                        layer_idx = int(frame_info.frame.f_locals['layer_idx'])
+                        break
+                    except Exception:
+                        pass
+        # 默认值
+        if layer_idx is None:
+            layer_idx = -1
+        self.layer_idx = layer_idx
+        # 构建层名称
+        if layer_idx >= 0:
+            self.layer_name = f"model.layers.{layer_idx}.mlp"
+        else:
+            self.layer_name = self.key
+        
+        # 注册到MoeTracker
+        from ktransformers.operators.moe_tracker import get_moe_tracker
+        self.moe_tracker = get_moe_tracker()
+        self.layer_id = self.moe_tracker.register_layer(self.layer_name)
+        print(f"Registered MoE block: {self.layer_name} with ID {self.layer_id}")
+    
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         orig_shape = hidden_states.shape

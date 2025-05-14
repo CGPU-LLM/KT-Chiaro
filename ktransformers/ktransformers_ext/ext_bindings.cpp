@@ -18,9 +18,12 @@
 #include "pybind11/operators.h"
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
+#include "moe_tracker.h"
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <vector>
+#include <mutex>
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -566,6 +569,15 @@ PYBIND11_MODULE(cpuinfer_ext, m) {
         .def("sync", &CPUInfer::sync)
         .def("sync_with_cuda_stream", &CPUInfer::sync_with_cuda_stream);
 
+    // 添加moe_tracker接口
+    m.def("moe_tracker_initialize", &moe_tracker::moe_tracker_initialize, "初始化MoE层跟踪器");
+    m.def("moe_tracker_register_layer", &moe_tracker::moe_tracker_register_layer, "注册一个MoE层并返回其ID");
+    m.def("moe_tracker_get_layer_count", &moe_tracker::moe_tracker_get_layer_count, "获取已注册的MoE层数量");
+    m.def("moe_tracker_set_current_layer", &moe_tracker::moe_tracker_set_current_layer, "设置当前正在计算的MoE层");
+    m.def("moe_tracker_get_current_layer", &moe_tracker::moe_tracker_get_current_layer, "获取当前正在计算的MoE层ID");
+    m.def("moe_tracker_get_layer_name", &moe_tracker::moe_tracker_get_layer_name, "获取指定层ID对应的层名称");
+    m.def("moe_tracker_get_layer_id_by_name", &moe_tracker::moe_tracker_get_layer_id_by_name, "获取指定层名对应的层ID");
+
     auto linear_module = m.def_submodule("linear");
     py::class_<LinearConfig>(linear_module, "LinearConfig")
         .def(py::init([](int hidden_size, int intermediate_size, int stride,
@@ -603,28 +615,46 @@ PYBIND11_MODULE(cpuinfer_ext, m) {
                          int intermediate_size, int stride, int group_min_len,
                          int group_max_len, intptr_t gate_proj,
                          intptr_t up_proj, intptr_t down_proj, int gate_type,
-                         int up_type, int down_type, int hidden_type) {
+                         int up_type, int down_type, int hidden_type,
+                         int layer_id) {
             return MOEConfig(expert_num, routed_expert_num, hidden_size,
                              intermediate_size, stride, group_min_len,
                              group_max_len, (void *)gate_proj, (void *)up_proj,
                              (void *)down_proj, (ggml_type)gate_type,
                              (ggml_type)up_type, (ggml_type)down_type,
-                             (ggml_type)hidden_type);
-        }))
+                             (ggml_type)hidden_type, layer_id);
+        }), py::arg("expert_num"), py::arg("routed_expert_num"), 
+            py::arg("hidden_size"), py::arg("intermediate_size"),
+            py::arg("stride"), py::arg("group_min_len"), 
+            py::arg("group_max_len"), py::arg("gate_proj"),
+            py::arg("up_proj"), py::arg("down_proj"), 
+            py::arg("gate_type"), py::arg("up_type"), 
+            py::arg("down_type"), py::arg("hidden_type"),
+            py::arg("layer_id") = -1)
         .def(py::init([](int expert_num, int routed_expert_num, int hidden_size,
                          int intermediate_size, int stride, int group_min_len,
                          int group_max_len, const std::string &gate_file,
                          uint64_t gate_offset, const std::string &up_file,
                          uint64_t up_offset, const std::string &down_file,
                          uint64_t down_offset, int gate_type, int up_type,
-                         int down_type, int hidden_type) {
+                         int down_type, int hidden_type,
+                         int layer_id) {
             return MOEConfig(expert_num, routed_expert_num, hidden_size,
                              intermediate_size, stride, group_min_len,
                              group_max_len, gate_file, gate_offset,
                              up_file, up_offset, down_file, down_offset,
                              (ggml_type)gate_type, (ggml_type)up_type,
-                             (ggml_type)down_type, (ggml_type)hidden_type);
-        }));
+                             (ggml_type)down_type, (ggml_type)hidden_type,
+                             layer_id);
+        }), py::arg("expert_num"), py::arg("routed_expert_num"), 
+            py::arg("hidden_size"), py::arg("intermediate_size"),
+            py::arg("stride"), py::arg("group_min_len"), 
+            py::arg("group_max_len"), py::arg("gate_file"),
+            py::arg("gate_offset"), py::arg("up_file"), 
+            py::arg("up_offset"), py::arg("down_file"), 
+            py::arg("down_offset"), py::arg("gate_type"),
+            py::arg("up_type"), py::arg("down_type"), 
+            py::arg("hidden_type"), py::arg("layer_id") = -1);
     py::class_<MOE>(moe_module, "MOE")
         .def(py::init<MOEConfig>())
         .def("warm_up", &MOEBindings::WarmUpBindinds::cpuinfer_interface)

@@ -7,89 +7,104 @@
 namespace cpu_backend {
 
 ExpertMemoryManager::ExpertMemoryManager(const MOEConfig& config)
-    : config_(config),
-      pool_size_(config.routed_expert_num),
-      gate_pool_(pool_size_, nullptr),
-      up_pool_(pool_size_, nullptr),
-      down_pool_(pool_size_, nullptr) {
-    if(!noInputFlag) {
-        printf("[C++]: input the size of memory pool: ");
-        scanf("%d", &pool_size_);
-        if(pool_size_ == 0) {
-            pool_size_ = config.routed_expert_num;
-            noInputFlag = 1;
-        }
-        gate_pool_.resize(pool_size_);
-        up_pool_.resize(pool_size_);
-        down_pool_.resize(pool_size_);
+    : config_(config), entries_(config.expert_num) {
+    // printf("[C++] ExpertMemoryManager constructor: num = %d, gate_proj_file = %s, up_proj_file = %s, down_proj_file = %s\n", config.expert_num, config.gate_proj_file.c_str(), config.up_proj_file.c_str(), config.down_proj_file.c_str());
+    for (auto& e : entries_) {
+        e.loaded = false;
+        e.gate = nullptr;
+        e.up = nullptr;
+        e.down = nullptr;
     }
-    
-    size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size *
-        ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
-    size_t up_size = gate_size;
-    size_t down_size = (size_t)config_.hidden_size * config_.intermediate_size *
-        ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
-    for (int i = 0; i < pool_size_; ++i) {
-        gate_pool_[i] = malloc(gate_size);
-        up_pool_[i]   = malloc(up_size);
-        down_pool_[i] = malloc(down_size);
-    }
-    lru_queue_ = new LRUQueue(config_.expert_num, pool_size_, gate_pool_, up_pool_, down_pool_);
 }
 
 ExpertMemoryManager::~ExpertMemoryManager() {
-    for (int i = 0; i < pool_size_; ++i) {
-        free(gate_pool_[i]);
-        free(up_pool_[i]);
-        free(down_pool_[i]);
+    // printf("[C++] ExpertMemoryManager destructor\n");
+    // 卸载所有已加载的专家
+    for (int i = 0; i < config_.expert_num; ++i) {
+        if (entries_[i].loaded) {
+            unload(i);
+        }
     }
-    delete lru_queue_;
 }
 
 void ExpertMemoryManager::load(int expert_id) {
-    assert(expert_id >= 0 && expert_id < config_.expert_num);
-    if(lru_queue_->update(expert_id))
-        return;
-    auto memPointer = lru_queue_->find(expert_id);
-    size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size *
+    // printf("[C++] ExpertMemoryManager load: expert_id = %d\n", expert_id);
+    if (expert_id < 0 || expert_id >= config_.expert_num) return;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    if (ent.loaded) return;
+    // printf("[C++] Need to load expert %d\n", expert_id);
+    // Gate 大小
+    size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size * 
         ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
+    // 计算专家偏移
     uint64_t gate_offset = config_.gate_proj_offset + (uint64_t)expert_id * gate_size;
-    FILE* gf = fopen(config_.gate_proj_file.c_str(), "rb"); 
+    FILE* gf = fopen(config_.gate_proj_file.c_str(), "rb");
     fseek(gf, gate_offset, SEEK_SET);
-    fread(memPointer[0], 1, gate_size, gf); 
+    ent.gate = malloc(gate_size);
+    fread(ent.gate, 1, gate_size, gf);
     fclose(gf);
-    size_t up_size = gate_size;
+
+    // Up 大小
+    size_t up_size = gate_size; // 与 Gate 相同形状
     uint64_t up_offset = config_.up_proj_offset + (uint64_t)expert_id * up_size;
-    FILE* uf = fopen(config_.up_proj_file.c_str(), "rb"); 
+    FILE* uf = fopen(config_.up_proj_file.c_str(), "rb");
     fseek(uf, up_offset, SEEK_SET);
-    fread(memPointer[1], 1, up_size, uf); 
+    ent.up = malloc(up_size);
+    fread(ent.up, 1, up_size, uf);
     fclose(uf);
-    size_t down_size = (size_t)config_.hidden_size * config_.intermediate_size *
+
+    // Down 大小
+    size_t down_size = (size_t)config_.hidden_size * config_.intermediate_size * 
         ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
     uint64_t down_offset = config_.down_proj_offset + (uint64_t)expert_id * down_size;
-    FILE* df = fopen(config_.down_proj_file.c_str(), "rb"); 
+    FILE* df = fopen(config_.down_proj_file.c_str(), "rb");
     fseek(df, down_offset, SEEK_SET);
-    fread(memPointer[2], 1, down_size, df); 
+    ent.down = malloc(down_size);
+    fread(ent.down, 1, down_size, df);
     fclose(df);
+
+    ent.loaded = true;
 }
 
 void ExpertMemoryManager::unload(int expert_id) {
-    assert(expert_id >= 0 && expert_id < config_.expert_num);
+    // printf("[C++] ExpertMemoryManager unload: expert_id = %d\n", expert_id);
+    if (expert_id < 0 || expert_id >= config_.expert_num) return;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    if (!ent.loaded) return;
+    free(ent.gate);
+    free(ent.up);
+    free(ent.down);
+    ent.gate = ent.up = ent.down = nullptr;
+    ent.loaded = false;
 }
 
 void* ExpertMemoryManager::getGate(int expert_id) {
-    assert(expert_id >= 0 && expert_id < config_.expert_num);
-    return lru_queue_->find(expert_id)[0];
+    // printf("[C++] ExpertMemoryManager getGate: expert_id = %d (config file = %s)\n", expert_id, config_.gate_proj_file.c_str());
+    if (expert_id < 0 || expert_id >= config_.expert_num) return nullptr;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    assert(ent.loaded);
+    return ent.gate;
 }
 
 void* ExpertMemoryManager::getUp(int expert_id) {
-    assert(expert_id >= 0 && expert_id < config_.expert_num);
-    return lru_queue_->find(expert_id)[1];
+    // printf("[C++] ExpertMemoryManager getUp: expert_id = %d (config file = %s)\n", expert_id, config_.up_proj_file.c_str());
+    if (expert_id < 0 || expert_id >= config_.expert_num) return nullptr;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    assert(ent.loaded);
+    return ent.up;
 }
 
 void* ExpertMemoryManager::getDown(int expert_id) {
-    assert(expert_id >= 0 && expert_id < config_.expert_num);
-    return lru_queue_->find(expert_id)[2];
+    // printf("[C++] ExpertMemoryManager getDown: expert_id = %d (config file = %s)\n", expert_id, config_.down_proj_file.c_str());
+    if (expert_id < 0 || expert_id >= config_.expert_num) return nullptr;
+    auto& ent = entries_[expert_id];
+    std::lock_guard<std::mutex> lock(ent.mtx);
+    assert(ent.loaded);
+    return ent.down;
 }
 
 } // namespace cpu_backend

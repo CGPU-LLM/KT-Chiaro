@@ -29,4 +29,3 @@ test_prompt.txt
 down_gguf/
 dpskv2list/
 perf.*
-ktransformers/ktransformers_ext/debug/debug_log.txt

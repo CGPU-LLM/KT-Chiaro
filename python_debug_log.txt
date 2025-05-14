@@ -1,36 +1,64 @@
-Log initialized at 2025-05-06 05:20:29.164681
+Log initialized at 2025-05-14 07:18:11.083558
 ------------------------------
-[2025-05-06 05:20:30.323] GET IN Qwen2MoeForCausalLM: __init__
-[2025-05-06 05:20:30.325] Qwen2MoeModel: __init__: padding_idx = None, vocab_size = 151936, hidden_size = 3584, num_hidden_layers = 28
-[2025-05-06 05:20:30.331] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.364] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.397] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.431] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.463] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.496] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.529] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.562] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.594] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.628] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.661] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.694] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.727] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.859] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.891] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.923] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.956] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:30.988] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.020] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.052] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.084] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.117] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.149] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.182] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.214] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.246] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.279] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.311] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
-[2025-05-06 05:20:31.361] layers: ModuleList(
+[2025-05-14 07:18:12.175] GET IN Qwen2MoeForCausalLM: __init__
+[2025-05-14 07:18:12.177] Qwen2MoeModel: __init__: padding_idx = None, vocab_size = 151936, hidden_size = 3584, num_hidden_layers = 28
+[2025-05-14 07:18:12.183] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 0, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.183] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.216] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 1, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.216] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.248] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 2, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.248] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.280] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 3, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.280] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.312] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 4, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.312] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.344] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 5, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.344] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.376] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 6, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.377] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.409] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 7, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.409] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.440] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 8, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.440] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.473] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 9, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.473] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.505] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 10, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.505] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.537] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 11, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.537] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.569] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 12, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.569] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.692] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 13, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.692] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.724] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 14, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.724] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.756] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 15, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.756] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.788] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 16, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.789] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.820] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 17, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.820] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.852] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 18, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.852] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.883] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 19, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.884] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.915] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 20, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.915] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.947] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 21, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.947] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:12.978] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 22, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:12.978] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:13.010] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 23, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:13.011] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:13.042] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 24, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:13.042] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:13.073] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 25, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:13.074] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:13.105] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 26, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:13.106] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:13.137] In Decoder Layer: __init__: choose sparse moe block, layer_idx = 27, config.num_experts = 64, config.decoder_sparse_step = 1
+[2025-05-14 07:18:13.137] Qwen2MoeSparseMoeBlock: __init__: num_experts = 64, top_k = 8, norm_topk_prob = 0
+[2025-05-14 07:18:13.187] layers: ModuleList(
   (0-27): 28 x Qwen2MoeDecoderLayer(
     (self_attn): Qwen2MoeFlashAttention2(
       (q_proj): Linear(in_features=3584, out_features=3584, bias=True)
