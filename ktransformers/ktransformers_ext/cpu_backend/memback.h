@@ -30,6 +30,9 @@ public:
     void* getUp(int expert_id);
     void* getDown(int expert_id);
 
+    // 添加获取专家数量的方法
+    int getExpertNum() const;
+
 private:
     struct Entry {
         bool loaded;

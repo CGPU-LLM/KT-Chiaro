@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
+#include "../debug/debug.h"
+#include "../moe_tracker.h"
 
 namespace cpu_backend {
 
@@ -28,12 +30,16 @@ ExpertMemoryManager::~ExpertMemoryManager() {
 }
 
 void ExpertMemoryManager::load(int expert_id) {
-    // printf("[C++] ExpertMemoryManager load: expert_id = %d\n", expert_id);
+    debug_printf("[C++] ExpertMemoryManager load: expert_id = %d, layer_id = %d\n", expert_id, config_.layer_id);
+    debug_printf("[C++] Now calculating layer: %d\n", moe_tracker::moe_tracker_get_current_layer());
     if (expert_id < 0 || expert_id >= config_.expert_num) return;
     auto& ent = entries_[expert_id];
     std::lock_guard<std::mutex> lock(ent.mtx);
-    if (ent.loaded) return;
-    // printf("[C++] Need to load expert %d\n", expert_id);
+    if (ent.loaded) {
+        debug_printf("[C++] Expert %d ALREADY loaded\n\n", expert_id);
+        return;
+    }
+    debug_printf("[C++] NEED to load expert %d\n\n", expert_id);
     // Gate 大小
     size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size * 
         ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
@@ -68,7 +74,7 @@ void ExpertMemoryManager::load(int expert_id) {
 }
 
 void ExpertMemoryManager::unload(int expert_id) {
-    // printf("[C++] ExpertMemoryManager unload: expert_id = %d\n", expert_id);
+    debug_printf("[C++] ExpertMemoryManager unload: expert_id = %d, layer_id = %d\n", expert_id, config_.layer_id);
     if (expert_id < 0 || expert_id >= config_.expert_num) return;
     auto& ent = entries_[expert_id];
     std::lock_guard<std::mutex> lock(ent.mtx);
@@ -105,6 +111,10 @@ void* ExpertMemoryManager::getDown(int expert_id) {
     std::lock_guard<std::mutex> lock(ent.mtx);
     assert(ent.loaded);
     return ent.down;
+}
+
+int ExpertMemoryManager::getExpertNum() const {
+    return config_.expert_num;
 }
 
 } // namespace cpu_backend

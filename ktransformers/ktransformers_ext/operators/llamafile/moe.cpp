@@ -13,6 +13,8 @@
 #include <cassert>
 #include <cstdio>
 #include <thread>
+#include "../../cpu_backend/moe_prefetcher.h"
+#include "../../moe_tracker.h"
 
 #ifdef USE_NUMA
 #include <numa.h>
@@ -27,6 +29,10 @@ MOE::MOE(MOEConfig config) {
     config_ = config;
     // 初始化专家内存管理器
     mem_manager_ = std::make_unique<cpu_backend::ExpertMemoryManager>(config_);
+    // 注册到预取器，以便后续层可以异步预加载
+    if (config_.layer_id >= 0) {
+        MOEPrefetcher::getInstance().registerLayerManager(config_.layer_id, mem_manager_.get());
+    }
 
     // 如果使用外部文件存储的专家权重，则从文件加载
     if (config_.use_external_proj) {
@@ -440,6 +446,8 @@ void MOE::forward(int qlen, int k, const uint64_t* expert_ids, const float* weig
     // 记录当前层ID
     if (config_.layer_id >= 0) {
         moe_tracker::moe_tracker_set_current_layer(config_.layer_id);
+        // 触发异步预取 i+1, i+2 层权重
+        MOEPrefetcher::getInstance().onLayerBegin(config_.layer_id);
     }
     
     // 原有的代码

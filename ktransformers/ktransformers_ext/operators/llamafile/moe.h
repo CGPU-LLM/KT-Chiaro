@@ -29,6 +29,7 @@
 #include "../../cpu_backend/memback.h"
 #include "moe_config.h"
 #include "../../moe_tracker.h"
+#include "../../cpu_backend/moe_prefetcher.h"
 
 class MOE {
    public:

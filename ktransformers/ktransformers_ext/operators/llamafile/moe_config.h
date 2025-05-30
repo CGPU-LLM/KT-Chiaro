@@ -1,6 +1,7 @@
 #ifndef CPUINFER_MOE_CONFIG_H
 #define CPUINFER_MOE_CONFIG_H
 
+#include <string>
 #include "../../cpu_backend/backend.h"
 #include "conversion.h"
 #include "llama.cpp/ggml-impl.h"

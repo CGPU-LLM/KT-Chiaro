@@ -2,7 +2,7 @@ import datetime
 import os
 
 # 日志文件名
-DEBUG_LOG_FILENAME = "/home/chiarolrg/work/ktransformers/python_debug_log.txt"
+DEBUG_LOG_FILENAME = "./python_debug_log.txt"
 
 # 初始化器：首次导入时清空日志文件
 _log_initialized = False
