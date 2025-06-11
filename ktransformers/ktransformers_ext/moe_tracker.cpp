@@ -1,4 +1,5 @@
 #include "moe_tracker.h"
+#include "cpu_backend/moe_prefetcher.h"
 #include <cstring>
 #include <thread>
 #include "debug/debug.h"
@@ -87,6 +88,8 @@ int moe_tracker_get_layer_count() {
 
 void moe_tracker_set_current_layer(int layer_id) {
     MoeTracker::getInstance().setCurrentLayer(layer_id);
+    // 同步通知预取器当前层切换
+    MOEPrefetcher::getInstance().onLayerChanged(layer_id);
 }
 
 int moe_tracker_get_current_layer() {

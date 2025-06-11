@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <memory>
 #include "../operators/llamafile/moe_config.h"
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace cpu_backend {
 
@@ -44,6 +46,9 @@ private:
 
     MOEConfig config_;
     std::vector<Entry> entries_;  // 大小 = expert_num
+    int gate_fd;
+    int up_fd;
+    int down_fd;
 };
 
 } // namespace cpu_backend

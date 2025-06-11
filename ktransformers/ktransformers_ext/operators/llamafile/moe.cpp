@@ -445,13 +445,16 @@ void MOE::forward_many(int qlen, int k, const uint64_t* expert_ids, const float*
 void MOE::forward(int qlen, int k, const uint64_t* expert_ids, const float* weights, const void* input, void* output, Backend* backend) {
     // 记录当前层ID
     if (config_.layer_id >= 0) {
+        debug_printf("[C++] MOE::forward: layer_id = %d\n", config_.layer_id);
+        // 通知 tracker 层切换（预取系统会通过 tracker 回调 onLayerChanged）
         moe_tracker::moe_tracker_set_current_layer(config_.layer_id);
-        // 触发异步预取 i+1, i+2 层权重
-        MOEPrefetcher::getInstance().onLayerBegin(config_.layer_id);
+    } else {
+        debug_printf("[C++] [ERROR] MOE::forward: layer_id = %d\n", config_.layer_id);
+        assert(false);
     }
     
     // 原有的代码
-    debug_printf("[C++]: FORWARD: qlen = %d, k = %d\n", qlen, k);
+    debug_printf("FORWARD: qlen = %d, k = %d\n", qlen, k);
     if (true) {
     // if (qlen < config_.group_min_len) {
         for (int i = 0; i < qlen; i++) {

@@ -3,6 +3,8 @@
 #include <cstdarg>
 #include <mutex>
 
+#define DEBUG 1
+
 // 互斥锁，保证多线程安全
 static std::mutex debug_mutex;
 
@@ -19,6 +21,7 @@ struct DebugLogInitializer {
 static DebugLogInitializer debugLogInitializer;
 
 void debug_printf(const char* format, ...) {
+#if DEBUG == 1
     std::lock_guard<std::mutex> lock(debug_mutex);
     FILE* f = std::fopen(DEBUG_LOG_FILENAME, "a");
     if (!f) {
@@ -29,4 +32,5 @@ void debug_printf(const char* format, ...) {
     std::vfprintf(f, format, args);
     va_end(args);
     std::fclose(f);
+#endif
 } 
