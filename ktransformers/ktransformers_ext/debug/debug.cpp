@@ -11,10 +11,12 @@ static std::mutex debug_mutex;
 // 静态对象，在程序启动阶段构造，用于清空旧的日志文件
 struct DebugLogInitializer {
     DebugLogInitializer() {
+#if DEBUG == 1
         FILE* f = std::fopen(DEBUG_LOG_FILENAME, "w");
         if (f) {
             std::fclose(f);
         }
+#endif
     }
 };
 // 定义全局静态实例
@@ -33,4 +35,5 @@ void debug_printf(const char* format, ...) {
     va_end(args);
     std::fclose(f);
 #endif
+    return;
 } 

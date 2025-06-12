@@ -34,6 +34,11 @@ public:
 
     // 添加获取专家数量的方法
     int getExpertNum() const;
+    
+    void print_info();
+
+    // 添加批量加载连续专家的方法
+    void loadRange(int start_expert_id, int end_expert_id_exclusive);
 
 private:
     struct Entry {
@@ -49,6 +54,7 @@ private:
     int gate_fd;
     int up_fd;
     int down_fd;
+    std::mutex mtx_;
 };
 
 } // namespace cpu_backend

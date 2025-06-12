@@ -320,12 +320,14 @@ void MOE::forward_one(int k, const uint64_t* expert_ids, const float* weights, c
     if (config_.stride % ggml_blck_size(config_.hidden_type) != 0) {
         from_float(s_output_fp32_, output, config_.hidden_size, config_.hidden_type);
     }
-    if (config_.use_external_proj) {
-        backend->do_io_tasks(k,
-            [this, expert_ids](int idx) {
-                mem_manager_->unload(expert_ids[idx]);
-            });
-    }
+    // ! 因为 prefetcher 会自动 unload 过期层，所以这里不需要 unload
+    // ! 如果取消 prefetcher 或者 prefetcher 的 depth 设置为 0，则需要在这里 unload
+    // if (config_.use_external_proj) {
+    //     backend->do_io_tasks(k,
+    //         [this, expert_ids](int idx) {
+    //             mem_manager_->unload(expert_ids[idx]);
+    //         });
+    // }
 }
 
 void MOE::forward_many(int qlen, int k, const uint64_t* expert_ids, const float* weights, const void* input, void* output, Backend* backend) {

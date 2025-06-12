@@ -46,7 +46,6 @@ void MoeTracker::setCurrentLayer(int layer_id) {
     std::lock_guard<std::mutex> lock(mutex_);
     current_layer_id_ = layer_id;
     debug_printf("setCurrentLayer: %d\n", layer_id);
-    // TODO
 }
 
 int MoeTracker::getCurrentLayer() {

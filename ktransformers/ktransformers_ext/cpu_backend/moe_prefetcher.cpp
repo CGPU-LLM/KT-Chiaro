@@ -1,7 +1,10 @@
 #include "moe_prefetcher.h"
 #include "../debug/debug.h"
+#include "task_queue.h"
 #include "../moe_tracker.h"
-#include <iostream>
+#include <algorithm>
+
+using namespace cpu_backend;
 
 // 单例获取
 MOEPrefetcher& MOEPrefetcher::getInstance() {
@@ -9,39 +12,27 @@ MOEPrefetcher& MOEPrefetcher::getInstance() {
     return instance;
 }
 
-// 构造：启动 I/O 线程池
+// 构造：创建 I/O Backend
 MOEPrefetcher::MOEPrefetcher() {
-    printf("Input prefetch_depth and num_threads: ");
-    scanf("%d %d", &prefetch_depth_, &num_threads_);
-    for (int i = 0; i < num_threads_; ++i) {
-        io_threads_.emplace_back([this]() {
-            while (true) {
-                std::function<void()> task;
-                {
-                    std::unique_lock<std::mutex> lock(this->io_mutex_);
-                    this->io_cv_.wait(lock, [this]() { return this->stop_ || !this->io_queue_.empty(); });
-                    if (this->stop_ && this->io_queue_.empty()) {
-                        return;
-                    }
-                    task = std::move(this->io_queue_.front());
-                    this->io_queue_.pop();
-                }
-                // 执行加载或卸载任务
-                task();
-            }
-        });
-    }
+    // 初始化 I/O 后端线程池及批量大小参数
+    printf("Input prefetch_depth, num_threads and batch_size: ");
+    scanf("%d %d %d", &prefetch_depth_, &num_threads_, &batch_size_);
+    io_backend_ = std::make_unique<Backend>(num_threads_);
+    // 初始化 TaskQueue，用于序列化层切换任务
+    task_queue_ = std::make_unique<TaskQueue>();
 }
 
-// 析构：停止线程池并等待线程退出
+// 析构：释放 I/O Backend
 MOEPrefetcher::~MOEPrefetcher() {
-    shutdown();
+    // 清理 TaskQueue 和 I/O 后端
+    task_queue_.reset();
+    io_backend_.reset();
 }
 
 // 注册某层的 ExpertMemoryManager
-void MOEPrefetcher::registerLayerManager(int layer_id, cpu_backend::ExpertMemoryManager* mgr) {
+void MOEPrefetcher::registerLayerManager(int layer_id, ExpertMemoryManager* mgr) {
     debug_printf("[C++] registerLayerManager: layer_id = %d\n", layer_id);
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mu_);
     layer_mngr_[layer_id] = mgr;
     layer_num_++;
 }
@@ -49,76 +40,43 @@ void MOEPrefetcher::registerLayerManager(int layer_id, cpu_backend::ExpertMemory
 // 当模型切换到 layer_id 层时调用：卸载过期层，预取后续层
 void MOEPrefetcher::onLayerChanged(int layer_id) {
     debug_printf("[C++] onLayerChanged [begin]: layer_id = %d\n", layer_id);
-    std::lock_guard<std::mutex> lock(mutex_);
-    
-    // 1) 卸载所有小于等于 layer_id-1 的层
-    // for (auto it = scheduled_layers_.begin(); it != scheduled_layers_.end();) {
-    //     int ly = *it;
-    //     debug_printf("[C++] onLayerChanged [unload]: ly = %d, layer_id = %d\n", ly, layer_id);
-    //     if (ly <= layer_id - 1) {
-    //         debug_printf("[C++] onLayerChanged unloading layer %d\n", ly);
-    //         auto mgr = layer_mngr_[ly];
-    //         // 异步卸载所有专家
-    //         enqueueIOTask([mgr](int idx) { mgr->unload(idx); }, mgr->getExpertNum() - 1);
-    //         it = scheduled_layers_.erase(it);
-    //     } else {
-    //         ++it;
-    //     }
-    // }
-
-    int unload_layer = (layer_id - 1 + layer_num_) % layer_num_;
-    debug_printf("[C++] onLayerChanged [unload]: unload_layer = %d\n", unload_layer);
-    auto mgr = layer_mngr_[unload_layer];
-    enqueueIOTask([mgr](int idx) { mgr->unload(idx); }, mgr->getExpertNum() - 1);
-    assert(scheduled_layers_.count(unload_layer) == 1); // 这层必须要在scheduled_layers_中
-    scheduled_layers_.erase(unload_layer);
-
-    int depth = prefetch_depth_;
-    int num = layer_num_;
-
-    // 2) 预取 layer_id+1 ... layer_id+prefetch_depth_
-    for (int Y = layer_id + 1; Y <= layer_id + prefetch_depth_; ++Y) {
-        int y = Y % layer_num_;
-        debug_printf("[C++] onLayerChanged [prefetch]: y = %d, layer_id = %d\n", y, layer_id);
-        if (!layer_mngr_.count(y) || scheduled_layers_.count(y)) continue;
-        scheduled_layers_.insert(y);
-        auto mgr = layer_mngr_[y];
-        // 异步加载所有专家
-        debug_printf("[C++] onLayerChanged [Add to scheduled_layers_]: loading layer %d\n", y);
-        enqueueIOTask(
-            [mgr, y, depth, num](int idx) {
-                int cur = moe_tracker::MoeTracker::getInstance().getCurrentLayer();
-                if((y - cur + num) % num > depth || y == cur) {
-                    debug_printf("[C++] in lambda : y = %d, cur = %d, depth = %d, idx = %d, return directly\n", y, cur, depth, idx);
+    // 将层切换事件加入 TaskQueue，由工作线程依次处理
+    task_queue_->enqueue([this, layer_id]() {
+        std::lock_guard<std::mutex> lock(mu_);
+        // 卸载 layer_id-1
+        int unload_layer = (layer_id - 1 + layer_num_) % layer_num_;
+        debug_printf("[C++] onLayerChanged [task]: unload_layer = %d\n", unload_layer);
+        if (scheduled_layers_.erase(unload_layer)) {
+            debug_printf("[C++] onLayerChanged [task]: unloading layer %d\n", unload_layer);
+            auto mgr = layer_mngr_[unload_layer];
+            io_backend_->do_io_tasks(mgr->getExpertNum(), [mgr](int idx) { mgr->unload(idx); });
+        }
+        debug_printf("[C++] onLayerChanged [task]: unload_layer = %d\n", unload_layer);
+        // 预取后续层
+        for (int y = layer_id + 1; y <= layer_id + prefetch_depth_; ++y) {
+            int ly = y % layer_num_;
+            debug_printf("[C++] onLayerChanged [loop]: ly = %d\n", ly);
+            if (!layer_mngr_.count(ly) || scheduled_layers_.count(ly)) continue;
+            scheduled_layers_.insert(ly);
+            auto mgr = layer_mngr_[ly];
+            // 按批量大小分段调度批量加载任务
+            int N = mgr->getExpertNum();
+            int batch_size = this->batch_size_;
+            int task_count = (N + batch_size - 1) / batch_size;
+            io_backend_->do_io_tasks(task_count, [mgr, ly, batch_size, N, this](int task_id) {
+                int cur = moe_tracker::moe_tracker_get_current_layer();
+                // 如果该层已经过时则跳过
+                if (((ly - cur < 0) ? (ly - cur + layer_num_) : (ly - cur)) > prefetch_depth_ || ly == cur) {
+                    debug_printf("[C++] onLayerChanged [lambda]: skip layer = %d, cur = %d, ly = %d, task_id = %d\n", ly, cur, ly, task_id);
                     return;
                 }
-                mgr->load(idx); 
-            }, 
-            mgr->getExpertNum()
-        );
-    }
-}
-
-// 批量派发 I/O 任务：fn(idx) 重复 count 次
-void MOEPrefetcher::enqueueIOTask(std::function<void(int)> fn, int count) {
-    debug_printf("[C++] enqueueIOTask: count = %d\n", count);
-    std::lock_guard<std::mutex> lock(io_mutex_);
-    for (int i = 0; i < count; ++i) {
-        io_queue_.emplace([fn, i]() { fn(i); });
-    }
-    io_cv_.notify_all();
-}
-
-// 关闭 I/O 线程池
-void MOEPrefetcher::shutdown() {
-    {
-        std::lock_guard<std::mutex> lock(io_mutex_);
-        stop_ = true;
-    }
-    io_cv_.notify_all();
-    for (auto& t : io_threads_) {
-        if (t.joinable()) {
-            t.join();
+                // 计算本批次专家索引范围
+                int start = task_id * batch_size;
+                int end = std::min(start + batch_size, N);
+                if (start >= end) return;
+                debug_printf("[C++] onLayerChanged [lambda]: batch prefetch layer = %d, task_id = %d, range [%d, %d)\n", ly, task_id, start, end);
+                mgr->loadRange(start, end);
+            });
         }
-    }
+    });
 } 
