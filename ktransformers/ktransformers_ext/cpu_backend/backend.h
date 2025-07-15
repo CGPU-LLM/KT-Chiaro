@@ -17,6 +17,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <queue>
 
 enum ThreadStatus {
     WORKING,
@@ -39,10 +40,30 @@ class Backend {
                               std::function<void(int)>,
                               std::function<void(int)>);
     void do_io_tasks(int task_num, std::function<void(int)> io_func);
+    // 异步版本：仅调度任务，立即返回，由后台线程执行
+    void dispatch_io_tasks(int task_num, std::function<void(int)> io_func);
     #ifdef USE_NUMA
     static thread_local int numa_node;
     #endif
     static thread_local int thread_local_id;
+
+    struct AsyncJob {
+        int begin;
+        int end;
+        std::function<void(int)> fn;
+    };
+
+    // 异步 I/O 工作线程相关成员
+    std::queue<AsyncJob> async_queue_;
+    std::mutex async_mu_;
+    std::condition_variable async_cv_;
+    std::vector<std::thread> async_workers_;
+    std::atomic<bool> async_exit_{false};
+
+    void async_worker_loop(int worker_id);
+
+    // 异步入队接口：将 task_num 个任务拆分并推入队列，立刻返回
+    void enqueue_io_tasks(int task_num, std::function<void(int)> io_func);
 
   private:
     int thread_num_;

@@ -3,6 +3,7 @@
 #include "task_queue.h"
 #include "../moe_tracker.h"
 #include <algorithm>
+#include <chrono>
 
 using namespace cpu_backend;
 
@@ -40,6 +41,7 @@ void MOEPrefetcher::registerLayerManager(int layer_id, ExpertMemoryManager* mgr)
 // 当模型切换到 layer_id 层时调用：卸载过期层，预取后续层
 void MOEPrefetcher::onLayerChanged(int layer_id) {
     debug_printf("[C++] onLayerChanged [begin]: layer_id = %d\n", layer_id);
+    auto start = std::chrono::steady_clock::now();
     // 将层切换事件加入 TaskQueue，由工作线程依次处理
     task_queue_->enqueue([this, layer_id]() {
         std::lock_guard<std::mutex> lock(mu_);
@@ -49,7 +51,7 @@ void MOEPrefetcher::onLayerChanged(int layer_id) {
         if (scheduled_layers_.erase(unload_layer)) {
             debug_printf("[C++] onLayerChanged [task]: unloading layer %d\n", unload_layer);
             auto mgr = layer_mngr_[unload_layer];
-            io_backend_->do_io_tasks(mgr->getExpertNum(), [mgr](int idx) { mgr->unload(idx); });
+            io_backend_->enqueue_io_tasks(mgr->getExpertNum(), [mgr](int idx) { mgr->unload(idx); });
         }
         debug_printf("[C++] onLayerChanged [task]: unload_layer = %d\n", unload_layer);
         // 预取后续层
@@ -63,7 +65,7 @@ void MOEPrefetcher::onLayerChanged(int layer_id) {
             int N = mgr->getExpertNum();
             int batch_size = this->batch_size_;
             int task_count = (N + batch_size - 1) / batch_size;
-            io_backend_->do_io_tasks(task_count, [mgr, ly, batch_size, N, this](int task_id) {
+            io_backend_->enqueue_io_tasks(task_count, [mgr, ly, batch_size, N, this](int task_id) {
                 int cur = moe_tracker::moe_tracker_get_current_layer();
                 // 如果该层已经过时则跳过
                 if (((ly - cur < 0) ? (ly - cur + layer_num_) : (ly - cur)) > prefetch_depth_ || ly == cur) {
@@ -79,4 +81,7 @@ void MOEPrefetcher::onLayerChanged(int layer_id) {
             });
         }
     });
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    debug_printf("[C++] onLayerChanged [TIME]: %d ms\n", duration);
 } 

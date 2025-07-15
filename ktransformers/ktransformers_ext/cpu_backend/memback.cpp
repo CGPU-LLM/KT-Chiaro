@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <ctime>
 #include <cstring>  // for memcpy
+#include <chrono>
 
 namespace cpu_backend {
 
@@ -56,20 +57,28 @@ void ExpertMemoryManager::load(int expert_id) {
     }
     debug_printf("[C++] NEED to load expert %d\n\n", expert_id);
     if (config_.use_external_proj) {
+        auto start = std::chrono::steady_clock::now();
+        debug_printf("[C++] loadone %d: start to malloc\n", expert_id);
         size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
         uint64_t gate_offset = config_.gate_proj_offset + (uint64_t)expert_id * gate_size;
         ent.gate = malloc(gate_size);
-        pread(gate_fd, ent.gate, gate_size, gate_offset);
 
         size_t up_size = gate_size;
         uint64_t up_offset = config_.up_proj_offset + (uint64_t)expert_id * up_size;
         ent.up = malloc(up_size);
-        pread(up_fd, ent.up, up_size, up_offset);
 
         size_t down_size = (size_t)config_.hidden_size * config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
         uint64_t down_offset = config_.down_proj_offset + (uint64_t)expert_id * down_size;
         ent.down = malloc(down_size);
+        debug_printf("[C++] loadone %d: malloc done, start to pread\n", expert_id);
+
+        pread(up_fd, ent.up, up_size, up_offset);
+        pread(gate_fd, ent.gate, gate_size, gate_offset);
         pread(down_fd, ent.down, down_size, down_offset);
+        debug_printf("[C++] loadone %d: finish pread\n", expert_id);
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        debug_printf("[C++] loadone %d: time = %d ms\n", expert_id, duration);
     } else {
         // Gate 大小
         size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size * 
@@ -171,6 +180,7 @@ void ExpertMemoryManager::loadRange(int start_expert_id, int end_expert_id_exclu
     int count = end_expert_id_exclusive - start_expert_id;
     if (count <= 0) return;
     // 计算单个专家的大小
+    debug_printf("[C++] loadRange [%d, %d): pass the check\n", start_expert_id, end_expert_id_exclusive);
     size_t gate_size = (size_t)config_.intermediate_size * config_.hidden_size * ggml_type_size(config_.gate_type) / ggml_blck_size(config_.gate_type);
     size_t up_size = gate_size;
     size_t down_size = (size_t)config_.hidden_size * config_.intermediate_size * ggml_type_size(config_.down_type) / ggml_blck_size(config_.down_type);
@@ -178,25 +188,30 @@ void ExpertMemoryManager::loadRange(int start_expert_id, int end_expert_id_exclu
     size_t total_gate = gate_size * count;
     size_t total_up = up_size * count;
     size_t total_down = down_size * count;
+    debug_printf("[C++] loadRange [%d, %d): finish calculating size\n", start_expert_id, end_expert_id_exclusive);
     if (config_.use_external_proj) {
         // 批量 pread
+        debug_printf("[C++] loadRange [%d, %d): start to malloc\n", start_expert_id, end_expert_id_exclusive);
         void* gate_buf = malloc(total_gate);
-        pread(gate_fd, gate_buf, total_gate, config_.gate_proj_offset + (uint64_t)start_expert_id * gate_size);
         void* up_buf = malloc(total_up);
-        pread(up_fd, up_buf, total_up, config_.up_proj_offset + (uint64_t)start_expert_id * up_size);
         void* down_buf = malloc(total_down);
+        debug_printf("[C++] loadRange [%d, %d): malloc done, start to pread\n", start_expert_id, end_expert_id_exclusive);
+        pread(gate_fd, gate_buf, total_gate, config_.gate_proj_offset + (uint64_t)start_expert_id * gate_size);
+        pread(up_fd, up_buf, total_up, config_.up_proj_offset + (uint64_t)start_expert_id * up_size);
         pread(down_fd, down_buf, total_down, config_.down_proj_offset + (uint64_t)start_expert_id * down_size);
+        debug_printf("[C++] loadRange [%d, %d): finish pread\n", start_expert_id, end_expert_id_exclusive);
         // 分发到各专家
         for (int i = 0; i < count; ++i) {
-            debug_printf("[C++] loadRange [loop]: i = %d, id = %d\n", i, start_expert_id + i);
+            auto start = std::chrono::steady_clock::now();
+            debug_printf("[C++] loadRange [%d, %d)[loop]: begin load one: i = %d, id = %d\n", start_expert_id, end_expert_id_exclusive, i, start_expert_id + i);
             int id = start_expert_id + i;
             auto& ent = entries_[id];
             std::lock_guard<std::mutex> lock(ent.mtx);
             if (ent.loaded) {
-                debug_printf("[C++] loadRange [loop]: id = %d, ALREADY loaded\n", id);
+                debug_printf("[C++] loadRange [%d, %d)[loop]: id = %d, ALREADY loaded\n", start_expert_id, end_expert_id_exclusive, id);
                 continue;
             }
-            debug_printf("[C++] loadRange [loop]: id = %d, LOADING\n", id);
+            debug_printf("[C++] loadRange [%d, %d)[loop]: id = %d, LOADING\n", start_expert_id, end_expert_id_exclusive, id);
             ent.gate = malloc(gate_size);
             memcpy(ent.gate, (char*)gate_buf + (size_t)i * gate_size, gate_size);
             ent.up = malloc(up_size);
@@ -204,6 +219,10 @@ void ExpertMemoryManager::loadRange(int start_expert_id, int end_expert_id_exclu
             ent.down = malloc(down_size);
             memcpy(ent.down, (char*)down_buf + (size_t)i * down_size, down_size);
             ent.loaded = true;
+            debug_printf("[C++] loadRange [%d, %d) [loop]: finish load one: i = %d, id = %d\n", start_expert_id, end_expert_id_exclusive, i, id);
+            auto end = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            debug_printf("[C++] loadRange [%d, %d) [loop]: load one time = %d ms\n", start_expert_id, end_expert_id_exclusive, duration);
         }
         free(gate_buf);
         free(up_buf);

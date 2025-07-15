@@ -9,6 +9,7 @@
  **/
 
 #include "backend.h"
+#include <cassert>
 
 #ifdef USE_NUMA
 #include <numa.h>
@@ -31,6 +32,13 @@ Backend::Backend(int max_thread_num) {
     for (int i = 1; i < max_thread_num_; i++) {
         workers_[i] = std::thread(&Backend::worker_thread, this, i);
     }
+
+    // 启动异步 I/O 工作线程 (max_thread_num_-1 个)
+    int async_thread_num = std::max(1, max_thread_num_ - 1);
+    async_workers_.reserve(async_thread_num);
+    for (int i = 0; i < async_thread_num; ++i) {
+        async_workers_.emplace_back(&Backend::async_worker_loop, this, i);
+    }
 }
 
 Backend::~Backend() {
@@ -42,6 +50,13 @@ Backend::~Backend() {
         if (workers_[i].joinable()) {
             workers_[i].join();
         }
+    }
+
+    // 关闭异步工作线程
+    async_exit_.store(true, std::memory_order_release);
+    async_cv_.notify_all();
+    for (auto &t : async_workers_) {
+        if (t.joinable()) t.join();
     }
 }
 
@@ -156,4 +171,90 @@ void Backend::worker_thread(int thread_id) {
 // Execute I/O tasks (load/unload) using the existing thread pool and block until completion
 void Backend::do_io_tasks(int task_num, std::function<void(int)> io_func) {
     do_work_stealing_job(task_num, nullptr, io_func, nullptr);
+}
+
+// 异步接口：仅把任务分配给后台 worker，caller 立即返回
+void Backend::dispatch_io_tasks(int task_num, std::function<void(int)> io_func) {
+    // 如果后台线程数不足，退化为同步执行
+    if (max_thread_num_ <= 1) {
+        do_io_tasks(task_num, io_func);
+        return;
+    }
+
+    init_func_ = nullptr;
+    compute_func_ = io_func;
+    finalize_func_ = nullptr;
+
+    // 只使用后台线程 1..max_thread_num_-1
+    int worker_threads = std::min(max_thread_num_ - 1, task_num);
+    if (worker_threads <= 0) {
+        // 不应该走到这里，但以防万一
+        do_io_tasks(task_num, io_func);
+        assert(false);
+        return;
+    }
+
+    thread_num_ = worker_threads + 1; // 包含 caller 线程0
+
+    int base = task_num / worker_threads;
+    int remain = task_num % worker_threads;
+
+    // thread 0 不工作
+    thread_state_[0].curr->store(0, std::memory_order_relaxed);
+    thread_state_[0].end = 0;
+    thread_state_[0].status->store(ThreadStatus::WAITING, std::memory_order_release);
+
+    int start = 0;
+    for (int i = 1; i <= worker_threads; ++i) {
+        int end = start + base + ((i - 1) < remain);
+        thread_state_[i].curr->store(start, std::memory_order_relaxed);
+        thread_state_[i].end = end;
+        thread_state_[i].status->store(ThreadStatus::WORKING, std::memory_order_release);
+        start = end;
+    }
+
+    // 多余的线程（若 max_thread_num_ > worker_threads+1）保持 WAITING
+    for (int i = worker_threads + 1; i < max_thread_num_; ++i) {
+        thread_state_[i].status->store(ThreadStatus::WAITING, std::memory_order_release);
+    }
+    // caller 立即返回，由后台 worker 执行
+}
+
+// 异步工作线程主循环
+void Backend::async_worker_loop(int /*worker_id*/) {
+    while (true) {
+        AsyncJob job;
+        {
+            std::unique_lock<std::mutex> lk(async_mu_);
+            async_cv_.wait(lk, [&]() { return async_exit_.load() || !async_queue_.empty(); });
+            if (async_exit_.load() && async_queue_.empty()) {
+                return;
+            }
+            job = async_queue_.front();
+            async_queue_.pop();
+        }
+        for (int idx = job.begin; idx < job.end; ++idx) {
+            job.fn(idx);
+        }
+    }
+}
+
+void Backend::enqueue_io_tasks(int task_num, std::function<void(int)> io_func) {
+    if (task_num <= 0) return;
+
+    int worker_threads = std::max(1, static_cast<int>(async_workers_.size()));
+    int base = task_num / worker_threads;
+    int remain = task_num % worker_threads;
+
+    int start = 0;
+    for (int w = 0; w < worker_threads; ++w) {
+        int end = start + base + (w < remain ? 1 : 0);
+        if (start >= end) break;
+        {
+            std::lock_guard<std::mutex> lk(async_mu_);
+            async_queue_.push({start, end, io_func});
+        }
+        async_cv_.notify_one();
+        start = end;
+    }
 }
