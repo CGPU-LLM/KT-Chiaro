@@ -51,7 +51,7 @@ void MOEPrefetcher::onLayerChanged(int layer_id) {
         if (scheduled_layers_.erase(unload_layer)) {
             debug_printf("[C++] onLayerChanged [task]: unloading layer %d\n", unload_layer);
             auto mgr = layer_mngr_[unload_layer];
-            io_backend_->enqueue_io_tasks(mgr->getExpertNum(), [mgr](int idx) { mgr->unload(idx); });
+            io_backend_->enqueue_io_tasks(std::min(8, mgr->getExpertNum()), [mgr](int idx) { mgr->unload(idx); });
         }
         debug_printf("[C++] onLayerChanged [task]: unload_layer = %d\n", unload_layer);
         // 预取后续层
@@ -62,7 +62,7 @@ void MOEPrefetcher::onLayerChanged(int layer_id) {
             scheduled_layers_.insert(ly);
             auto mgr = layer_mngr_[ly];
             // 按批量大小分段调度批量加载任务
-            int N = mgr->getExpertNum();
+            int N = std::min(8, mgr->getExpertNum());
             int batch_size = this->batch_size_;
             int task_count = (N + batch_size - 1) / batch_size;
             io_backend_->enqueue_io_tasks(task_count, [mgr, ly, batch_size, N, this](int task_id) {

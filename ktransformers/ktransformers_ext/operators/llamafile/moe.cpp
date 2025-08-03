@@ -459,13 +459,21 @@ void MOE::forward(int qlen, int k, const uint64_t* expert_ids, const float* weig
     debug_printf("FORWARD: qlen = %d, k = %d\n", qlen, k);
     if (true) {
     // if (qlen < config_.group_min_len) {
+        constexpr int FIXED_K = 8;
+        static uint64_t fixed_ids[FIXED_K]   = {0,1,2,3,4,5,6,7};
+        static float   fixed_weights[FIXED_K];
+        static bool init_weights = false;
+        if (!init_weights) {
+            for (int i = 0; i < FIXED_K; ++i) fixed_weights[i] = 1.0f / FIXED_K;
+            init_weights = true;
+        }
         for (int i = 0; i < qlen; i++) {
             forward_one(
-                k, 
-                expert_ids + i * k, 
-                weights + i * k, 
-                (uint8_t*)input + i * HIDDEN_GAP, 
-                (uint8_t*)output + i * HIDDEN_GAP, 
+                FIXED_K,
+                fixed_ids,
+                fixed_weights,
+                (uint8_t*)input + i * HIDDEN_GAP,
+                (uint8_t*)output + i * HIDDEN_GAP,
                 backend
             );
         }
